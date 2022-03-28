@@ -13,9 +13,11 @@
 #' the computed smooth trend?
 #' @param deriv Derivative of B-splines, default 0. At the moment only
 #' implemented for spl1D.
+#' @param which An integer, for if there are multiple splxD terms in the model.
+#' Default value is 1.
 #'
 #' @return A data.frame with predictions for the smooth trend on the specified
-#' grid.
+#' grid. The standard errors are saved if `deriv` has default value 0.
 #'
 #' @examples
 #' ## Fit model on john.alpha data from agridat package.
@@ -47,7 +49,8 @@ obtainSmoothTrend <- function(object,
                               grid = NULL,
                               newdata = NULL,
                               deriv = 0,
-                              includeIntercept = FALSE) {
+                              includeIntercept = FALSE,
+                              which = 1) {
   if (!inherits(object, "LMMsolve")) {
     stop("object should be an object of class LMMsolve.\n")
   }
@@ -57,8 +60,14 @@ obtainSmoothTrend <- function(object,
   if (is.null(grid) && is.null(newdata)) {
     stop("Specify either grid or newdata.\n")
   }
+  if (!is.numeric(which) || which > length(object$splRes)) {
+    stop("which should be an integer with value at most the number of fitted",
+         "spline components.\n")
+  }
   ## Get dimension of fitted spline component.
-  splRes <- object$splRes
+  splRes <- object$splRes[[which]]
+  splF_name <- splRes$term.labels.f
+  splR_name <- splRes$term.labels.r
   ## Get content from splRes.
   x <- splRes$x
   knots <- splRes$knots
@@ -99,8 +108,8 @@ obtainSmoothTrend <- function(object,
            "of the fitted spline: ", splDim,".\n")
     }
     ## Construct grid for each dimension.
-    xGrid <- lapply(X = seq_along(x), FUN = function(i) {
-      seq(min(x[[i]]), max(x[[i]]), length = grid[i])
+    xGrid <- lapply(X = seq_len(splDim), FUN = function(i) {
+      seq(attr(knots[[i]], which='xmin'), attr(knots[[i]], which='xmax'), length = grid[i])
     })
     ## Compute Bx per dimension.
     Bx <- mapply(FUN = Bsplines, knots, xGrid, deriv)
@@ -129,9 +138,9 @@ obtainSmoothTrend <- function(object,
     bc <- 0
   } else {
     ## Remove leading zero, added for reference level.
-    bc <- as.vector(XTot %*% coef(object)$splF)
+    bc <- as.vector(XTot %*% coef(object)[[splF_name]])
   }
-  sc <- as.vector(BxTot %*% coef(object)$splR)
+  sc <- as.vector(BxTot %*% coef(object)[[splR_name]])
   ## Compute fitted values.
   fit <- mu + bc + sc
   ## Construct output data.frame.
@@ -142,6 +151,37 @@ obtainSmoothTrend <- function(object,
     outDat <- data.frame(expand.grid(rev(xGrid)), ypred = fit)
     colnames(outDat)[-ncol(outDat)] <- rev(names(x))
     outDat <- outDat[c(names(x), "ypred")]
+  }
+  # only add standard errors if deriv == 0
+  if (deriv == 0) {
+    labels <- c(object$term.labels.f, object$term.labels.r)
+    lU <- list()
+    dim <- object$dim
+    for (i in seq_along(dim)) {
+      lU[[i]] = spam::spam(x = 0, nrow = nrow(BxTot), ncol = dim[i])
+    }
+    if (includeIntercept) {
+      lU[[1]] = spam::spam(x = 1, nrow = nrow(BxTot), ncol = 1)
+    }
+    if (!is.null(splRes$term.labels.f)) {
+      ndx.f <- which(splRes$term.labels.f == labels)
+      lU[[ndx.f]] <- XTot
+    }
+    ndx.r <- which(splRes$term.labels.r == labels)
+    lU[[ndx.r]] <- BxTot
+
+    U <- Reduce(spam::cbind.spam, lU)
+
+    ## !!! NOT CHANGE THIS LINE !!!
+    C = object$C + 0 * spam::crossprod.spam(U)
+
+    cholC <- chol(C)
+    A <- DerivCholesky(cholC)
+
+    ## Equivalent to v <- diag(U %*% A %*% t(U))
+    v <- spam::rowSums.spam((U %*% A) * U)
+
+    outDat[["se"]] <- sqrt(v)
   }
   return(outDat)
 }

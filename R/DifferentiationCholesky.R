@@ -1,7 +1,11 @@
 #' @keywords internal
 setClass("ADchol",
-         slots = c(colpointers = "numeric",
+         slots = c(supernodes = "numeric",
+                   rowpointers = "numeric",
+                   colpointers = "numeric",
                    rowindices = "numeric",
+                   entries = "numeric",
+                   ADentries  = "numeric",
                    P = "matrix"))
 
 
@@ -16,7 +20,24 @@ ADchol <- function(P_list) {
   cholC <- chol(C, memory = list(nnzR = 8 * opt$nnz,
                                  nnzcolindices = 4 * opt$nnz))
   L <- construct_ADchol_Rcpp(cholC, P_list)
-  new("ADchol", colpointers = L$colpointers, rowindices = L$rowindices,
+  new("ADchol",
+      supernodes = L$supernodes,
+      rowpointers = L$rowpointers,
+      colpointers = L$colpointers,
+      rowindices = L$rowindices,
+      entries = L$entries,
+      ADentries = L$ADentries,
       P = L$P)
+}
+
+#' This function saves result of partial derivatives of Cholesky to a
+#' a spam matrix, and is used to calculate standard errors and for predictions.
+#' @keywords internal
+DerivCholesky <- function(cholC) {
+  cholC@entries <- partialDerivCholesky(cholC)
+  A <- spam::as.spam(cholC)
+  ## reordering, can this be done in more efficient way?
+  A <- A[cholC@invpivot, cholC@invpivot]
+  return(A)
 }
 

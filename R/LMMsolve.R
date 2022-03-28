@@ -30,6 +30,9 @@
 #' precision matrix of a corresponding random term in the model. The row and
 #' column order of the precision matrices should match the order of the
 #' levels of the corresponding factor in the data.
+#' @param weights A character string identifying the column
+#' of data to use as relative weights in the fit. Default value NULL, weights are
+#' all equal to one.
 #' @param data A data.frame containing the modeling data.
 #' @param residual A formula for the residual part of the model. Should be of
 #' the form "~ pred".
@@ -90,7 +93,7 @@
 #' \code{\link{spl2D}}, \code{\link{spl3D}}
 #'
 #' @importFrom stats model.frame terms model.matrix contrasts as.formula
-#' terms.formula aggregate
+#' terms.formula aggregate model.response var
 #'
 #' @export
 LMMsolve <- function(fixed,
@@ -98,6 +101,7 @@ LMMsolve <- function(fixed,
                      spline = NULL,
                      group = NULL,
                      ginverse = NULL,
+                     weights = NULL,
                      data,
                      residual = NULL,
                      tolerance = 1.0e-6,
@@ -115,13 +119,18 @@ LMMsolve <- function(fixed,
       (!inherits(random, "formula") || length(terms(random)) != 2)) {
     stop("random should be a formula of the form \" ~ pred\".\n")
   }
-  if (!is.null(spline) &&
-      (!inherits(spline, "formula") || length(terms(spline)) != 2 ||
-       ## Spline formula should consist of splxD() and nothing else.
-       length(unlist(attr(terms(spline, specials = c("spl1D", "spl2D", "spl3D")),
-                          "specials"))) != 1)) {
-    stop("spline should be a formula of form \"~ spl1D()\", \"~ spl2D()\" ",
-         "or \"~spl3D()\".\n")
+  splErr <- paste("spline should be a formula of form \"~ spl1D() + ... + ",
+                  "spl1D()\", \"~ spl2D()\" or \"~spl3D()\"\n")
+  if (!is.null(spline)) {
+    if (!inherits(spline, "formula")) stop(splErr)
+    splTrms <- terms(spline, specials = c("spl1D", "spl2D", "spl3D"))
+    splSpec <- attr(splTrms, "specials")
+    if (length(terms(splTrms)) != 2 ||
+        ## Spline formula should consist of splxD() terms and nothing else.
+        length(splSpec[!sapply(X = splSpec, FUN = is.null)]) > 1 ||
+        length(unlist(splSpec)) != length(labels(terms(spline)))) {
+      stop(splErr)
+    }
   }
   if (!is.null(ginverse) &&
       (!is.list(ginverse) ||
@@ -129,6 +138,17 @@ LMMsolve <- function(fixed,
        (!all(sapply(X = ginverse, FUN = function(x) {
          (is.matrix(x) || spam::is.spam(x)) && isSymmetric(x)}))))) {
     stop("ginverse should be a named list of symmetric matrices.\n")
+  }
+  if (!is.null(weights)) {
+    if (!(weights %in% colnames(data))) {
+      stop("weights not defined in dataframe data")
+    }
+    w <- data[[weights]]
+    if (!is.numeric(w) || sum(is.na(w)) != 0 || min(w) <= 0) {
+      stop("weights should be a numeric vector with positive values")
+    }
+  } else {
+    w <- rep(1.0, nrow(data))
   }
   if (!is.null(residual) &&
       (!inherits(residual, "formula") || length(terms(residual)) != 2)) {
@@ -146,16 +166,18 @@ LMMsolve <- function(fixed,
   chkGroup <- checkGroup(random, group)
   random <- chkGroup$random
   group <- chkGroup$group
-  checkFormVars(fixed, data)
-  checkFormVars(random, data)
-  checkFormVars(residual, data)
+  data <- checkFormVars(fixed, data)
+  data <- checkFormVars(random, data)
+  data <- checkFormVars(residual, data)
   ## Remove NA for response variable from data.
   respVar <- all.vars(fixed)[attr(terms(fixed), "response")]
   respVarNA <- is.na(data[[respVar]])
   if (sum(respVarNA) > 0) {
     warning(sum(respVarNA), " observations removed with missing value for ",
             respVar, ".\n", call. = FALSE)
-    data <- data[!respVarNA, ]
+    data <- droplevels(data[!respVarNA, ])
+    ## remove missing values for weight (default w=1).
+    w <- w[!respVarNA]
   }
   ## Make random part.
   if (!is.null(random)) {
@@ -236,49 +258,76 @@ LMMsolve <- function(fixed,
   mf <- model.frame(fixed, data, drop.unused.levels = TRUE)
   mt <- terms(mf)
   f.terms <- all.vars(mt)[attr(mt, "dataClasses") == "factor"]
-  X = model.matrix(mt, data = mf,
-                   contrasts.arg = lapply(X = mf[, f.terms, drop = FALSE],
-                                          FUN = contrasts, contrasts = TRUE))
-  dim.f <- as.numeric(table(attr(X, "assign")))
+  X <- model.matrix(mt, data = mf,
+                    contrasts.arg = lapply(X = mf[, f.terms, drop = FALSE],
+                                           FUN = contrasts, contrasts = TRUE))
+  q <- qr(X)
+  remCols <- q$pivot[-seq(q$rank)]
+  if (length(remCols) > 0) {
+    dim.f <- as.numeric(table(attr(X, "assign")[-remCols]))
+    X <- X[ , -remCols, drop = FALSE]
+  } else {
+    dim.f <- as.numeric(table(attr(X, "assign")))
+  }
   term.labels.f <- attr(mt, "term.labels")
-  # calculate NomEff dimension for non-spline part
+  ## calculate NomEff dimension for non-spline part.
   NomEffDimRan <- calcNomEffDim(X, Z, dim.r)
   ## Add spline part.
-  splRes <- NULL
+  splResList <- NULL
   if (!is.null(spline)) {
-    tf <- terms(spline, specials = c("spl1D", "spl2D", "spl3D"))
-    terms <- attr(tf, "term.labels")
-    splRes <- eval(parse(text = terms), envir = data, enclos = parent.frame())
-    ## Add to design matrix fixed effect X.
-    X <- cbind(X, splRes$X)
-    ## Add to design matrix random effect Z.
-    Z <- cbind(Z, splRes$Z)
-    ## Expand matrices Ginv to the updated Z.
-    lGinv <- expandGinv(lGinv, splRes$lGinv)
-    ## A splxD model has x parameters.
-    varPar <- c(varPar, length(splRes$lGinv))
-    ## Add dims.
-    dim.f <- c(dim.f, splRes$dim.f)
-    dim.r <- c(dim.r, splRes$dim.r)
-    ## Add nominal ED
-    NomEffDimRan <- c(NomEffDimRan, splRes$EDnom)
-    ## Add labels.
-    term.labels.f <- c(term.labels.f, splRes$term.labels.f)
-    term.labels.r <- c(term.labels.r, splRes$term.labels.r)
+    splTerms <- labels(splTrms)
+    Nterms <- length(splTerms)
+    splResList <- list()
+    for (i in 1:Nterms) {
+      splRes <- eval(parse(text = splTerms[i]), envir = data, enclos = parent.frame())
+      ## Multiple 1D gam models should have unique x variables.
+      if (!is.null(term.labels.f) && !is.null(splRes$term.labels.f) &&
+          splRes$term.labels.f %in% term.labels.f) {
+        stop("x variables in 1D splines should be unique.\n")
+      }
+      splResList[[i]] <- splRes
+      ## Add to design matrix fixed effect X.
+      X <- cbind(X, splRes$X)
+      ## Add to design matrix random effect Z.
+      Z <- cbind(Z, splRes$Z)
+      ## Expand matrices Ginv to the updated Z.
+      lGinv <- expandGinv(lGinv, splRes$lGinv)
+      ## A splxD model has x parameters.
+      varPar <- c(varPar, length(splRes$lGinv))
+      ## Add dims.
+      dim.f <- c(dim.f, splRes$dim.f)
+      dim.r <- c(dim.r, splRes$dim.r)
+      ## Add nominal ED.
+      NomEffDimRan <- c(NomEffDimRan, splRes$EDnom)
+      ## Add labels.
+      term.labels.f <- c(term.labels.f, splRes$term.labels.f)
+      term.labels.r <- c(term.labels.r, splRes$term.labels.r)
+    }
   }
   ## Add intercept.
   if (attr(mt, "intercept") == 1) {
     term.labels.f <- c("(Intercept)", term.labels.f)
   }
-  ## Make residual part.
-  if (!is.null(residual)) {
-    residVar <- all.vars(residual)
-    lRinv <- makeRlist(df = data, column = residVar)
+  ## construct inverse of residual matrix R.
+  lRinv <- constructRinv(df = data, residual = residual, weights = w)
+  y <- model.response(mf)
+  ## check whether the variance for response is not zero.
+  if (is.null(residual)) {
+    if (var(y) < .Machine$double.eps / 2) {
+      stop("Variance response variable zero or almost zero.\n")
+    }
   } else {
-    lRinv <- list(residual = spam::diag.spam(1, nrow(data)))
-    attr(lRinv, "cnt") <- nrow(data)
+    resVar <- all.vars(residual)
+    varGrp <- tapply(X = y, INDEX = data[[resVar]], FUN = var)
+    ndxVar <- which(varGrp < .Machine$double.eps / 2)
+    if (length(ndxVar) > 0) {
+      levels_f <- levels(data[[resVar]])
+      levelsNoVar <- paste(levels_f[ndxVar], collapse = ", ")
+      stop("Variance response variable zero or almost zero for levels:\n",
+           levelsNoVar, "\n")
+    }
   }
-  y <- mf[, 1]
+  ## Fit models.
   obj <- sparseMixedModels(y = y, X = X, Z = Z, lGinv = lGinv, lRinv = lRinv,
                            tolerance = tolerance, trace = trace, maxit = maxit,
                            theta = theta)
@@ -286,40 +335,13 @@ LMMsolve <- function(fixed,
   ## Fixed terms.
   ef <- cumsum(dim.f)
   sf <- ef - dim.f + 1
-  coefF <- vector(mode = "list", length = length(dim.f))
-  for (i in seq_along(coefF)) {
-    coefFi <- obj$a[sf[i]:ef[i]]
-    labFi <- term.labels.f[i]
-    if (labFi == "(Intercept)") {
-      names(coefFi) <- "(Intercept)"
-      ## For fixed terms an extra 0 for the reference level has to be added.
-    } else if (labFi == "splF") {
-      ## Spline terms are just named 1...n.
-      names(coefFi) <- paste0("splF_", seq_along(coefFi))
-    } else {
-      coefFi <- c(0, coefFi)
-      names(coefFi) <- paste(labFi, levels(data[[labFi]]) , sep = "_")
-    }
-    coefF[[i]] <- coefFi
-  }
-  ## Similar for random terms.
+  coefF <- nameCoefs(coefs = obj$a, desMat = X, termLabels = term.labels.f,
+                     s = sf, e = ef, data = data, type = "fixed")
+  ## Random terms.
   er <- sum(dim.f) + cumsum(dim.r)
   sr <- er - dim.r + 1
-  coefR <- vector(mode = "list", length = length(dim.r))
-  for (i in seq_along(coefR)) {
-    coefRi <- obj$a[sr[i]:er[i]]
-    labRi <- term.labels.r[i]
-    if (labRi == "splR") {
-      ## Spline terms are just named 1...n.
-      names(coefRi) <- paste0("splR_", seq_along(coefRi))
-    } else if (labRi %in% names(group)) {
-      ## For group combine group name and column name.
-      names(coefRi) <- paste(labRi, colnames(data)[group[[labRi]]], sep = "_")
-    } else {
-      names(coefRi) <- paste(labRi, levels(data[[labRi]]), sep = "_")
-    }
-    coefR[[i]] <- coefRi
-  }
+  coefR <- nameCoefs(coefs = obj$a, termLabels = term.labels.r, s = sr, e = er,
+                     data = data, group = group, type = "random")
   ## Combine result for fixed and random terms.
   coefTot <- c(coefF, coefR)
   names(coefTot) <- c(term.labels.f, term.labels.r)
@@ -371,10 +393,11 @@ LMMsolve <- function(fixed,
                         residuals = obj$residuals,
                         nIter = obj$nIter,
                         C = obj$C,
+                        cholC = obj$cholC,
                         constantREML = constantREML,
                         dim = dim,
                         Nres = length(lRinv),
                         term.labels.f = term.labels.f,
                         term.labels.r = term.labels.r,
-                        splRes = splRes))
+                        splRes = splResList))
 }

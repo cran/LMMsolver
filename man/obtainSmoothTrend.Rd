@@ -9,7 +9,8 @@ obtainSmoothTrend(
   grid = NULL,
   newdata = NULL,
   deriv = 0,
-  includeIntercept = FALSE
+  includeIntercept = FALSE,
+  which = 1
 )
 }
 \arguments{
@@ -28,10 +29,13 @@ implemented for spl1D.}
 
 \item{includeIntercept}{Should the value of the intercept be included in
 the computed smooth trend?}
+
+\item{which}{An integer, for if there are multiple splxD terms in the model.
+Default value is 1.}
 }
 \value{
 A data.frame with predictions for the smooth trend on the specified
-grid.
+grid. The standard errors are saved if `deriv` has default value 0.
 }
 \description{
 Obtain the smooth trend for models fitted with a spline component.

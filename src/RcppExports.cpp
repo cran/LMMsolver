@@ -10,16 +10,15 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
-// cholesky
-NumericVector cholesky(NumericVector L, const IntegerVector& colpointers, const IntegerVector& rowindices);
-RcppExport SEXP _LMMsolver_cholesky(SEXP LSEXP, SEXP colpointersSEXP, SEXP rowindicesSEXP) {
+// construct_ADchol_Rcpp
+List construct_ADchol_Rcpp(SEXP U, const List& P_list);
+RcppExport SEXP _LMMsolver_construct_ADchol_Rcpp(SEXP USEXP, SEXP P_listSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type L(LSEXP);
-    Rcpp::traits::input_parameter< const IntegerVector& >::type colpointers(colpointersSEXP);
-    Rcpp::traits::input_parameter< const IntegerVector& >::type rowindices(rowindicesSEXP);
-    rcpp_result_gen = Rcpp::wrap(cholesky(L, colpointers, rowindices));
+    Rcpp::traits::input_parameter< SEXP >::type U(USEXP);
+    Rcpp::traits::input_parameter< const List& >::type P_list(P_listSEXP);
+    rcpp_result_gen = Rcpp::wrap(construct_ADchol_Rcpp(U, P_list));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -47,37 +46,23 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// logdetPlusDeriv
-NumericVector logdetPlusDeriv(SEXP arg, NumericVector lambda);
-RcppExport SEXP _LMMsolver_logdetPlusDeriv(SEXP argSEXP, SEXP lambdaSEXP) {
+// partialDerivCholesky
+NumericVector partialDerivCholesky(SEXP cholC);
+RcppExport SEXP _LMMsolver_partialDerivCholesky(SEXP cholCSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< SEXP >::type arg(argSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type lambda(lambdaSEXP);
-    rcpp_result_gen = Rcpp::wrap(logdetPlusDeriv(arg, lambda));
-    return rcpp_result_gen;
-END_RCPP
-}
-// construct_ADchol_Rcpp
-List construct_ADchol_Rcpp(SEXP U, const List& P_list);
-RcppExport SEXP _LMMsolver_construct_ADchol_Rcpp(SEXP USEXP, SEXP P_listSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< SEXP >::type U(USEXP);
-    Rcpp::traits::input_parameter< const List& >::type P_list(P_listSEXP);
-    rcpp_result_gen = Rcpp::wrap(construct_ADchol_Rcpp(U, P_list));
+    Rcpp::traits::input_parameter< SEXP >::type cholC(cholCSEXP);
+    rcpp_result_gen = Rcpp::wrap(partialDerivCholesky(cholC));
     return rcpp_result_gen;
 END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_LMMsolver_cholesky", (DL_FUNC) &_LMMsolver_cholesky, 3},
+    {"_LMMsolver_construct_ADchol_Rcpp", (DL_FUNC) &_LMMsolver_construct_ADchol_Rcpp, 2},
     {"_LMMsolver_logdet", (DL_FUNC) &_LMMsolver_logdet, 2},
     {"_LMMsolver_dlogdet", (DL_FUNC) &_LMMsolver_dlogdet, 2},
-    {"_LMMsolver_logdetPlusDeriv", (DL_FUNC) &_LMMsolver_logdetPlusDeriv, 2},
-    {"_LMMsolver_construct_ADchol_Rcpp", (DL_FUNC) &_LMMsolver_construct_ADchol_Rcpp, 2},
+    {"_LMMsolver_partialDerivCholesky", (DL_FUNC) &_LMMsolver_partialDerivCholesky, 1},
     {NULL, NULL, 0}
 };
 

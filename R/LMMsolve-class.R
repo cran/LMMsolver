@@ -2,25 +2,29 @@
 #'
 #' An object of class \code{LMMsolve} returned by the LMMsolve function,
 #' representing a fitted linear mixed model. Objects of this class have
-#' methods for the generic functions coef, .....
+#' methods for the generic functions coef, fitted, residuals, loglik and
+#' deviance.
 #'
 #' @return
 #' An object of class \code{LMMsolve} contains the following components:
 #' \item{logL}{The restricted log-likelihood at convergence}
-#' \item{dev}{The REML deviance at convergence (i.e., - 2 times the
-#' restricted log-likelihood \code{logL})}
 #' \item{sigma2e}{The residual error}
 #' \item{tau2e}{The estimated variance components}
-#' \item{ED}{The effective dimensions}
-#' \item{EDmax}{The maximal effective dimensions}
-#' \item{EDnames}{The names of the effective dimensions}
-#' \item{a}{The estimated effects from the mixed model equations}
+#' \item{EDdf}{The effective dimensions}
+#' \item{varPar}{The number of variance parameters for each variance component}
+#' \item{VarDf}{The table with variance components}
+#' \item{theta}{The precision parameters}
+#' \item{coefficients}{The estimated effects from the mixed model equations}
 #' \item{yhat}{The fitted values}
 #' \item{residuals}{The residuals}
+#' \item{nIter}{The number of iterations for the mixed model to converge}
+#' \item{C}{The mixed model coefficient matrix after last iteration}
+#' \item{cholC}{The cholesky decomposition of coefficient matrix C}
+#' \item{constantREML}{The REML constant}
 #' \item{dim}{The dimensions for each of the fixed and random terms in the
 #' mixed model}
-#' \item{term.labels}{The Names of the fixed and random terms in the mixed
-#' model}
+#' \item{term.labels.f}{The names of the fixed terms in the mixed model}
+#' \item{term.labels.r}{The names of the random terms in the mixed model}
 #' \item{splRes}{An object with definition of spline argument}
 #'
 #' @usage NULL
@@ -39,6 +43,7 @@ LMMsolveObject <- function(logL,
                            residuals,
                            nIter,
                            C,
+                           cholC,
                            constantREML,
                            dim,
                            Nres,
@@ -57,6 +62,7 @@ LMMsolveObject <- function(logL,
                  residuals = residuals,
                  nIter = nIter,
                  C = C,
+                 cholC = cholC,
                  constantREML = constantREML,
                  dim = dim,
                  Nres = Nres,
@@ -104,7 +110,6 @@ summary.LMMsolve <- function(object,
                              ...) {
   ## Checks.
   which <- match.arg(which)
-
   if (which == "dimensions") {
     tbl <- object$EDdf
   } else if (which == "variances") {
@@ -125,13 +130,17 @@ summary.LMMsolve <- function(object,
 print.summary.LMMsolve <- function(x,
                                    ...) {
   which <- attr(x, which = "which")
+  ## Compute sum of effective dimensions before rounding.
+  EDTot <- sum(x[["Effective"]])
+  ## Print max 2 decimals.
+  x[2:ncol(x)] <- round(x[2:ncol(x)], 2)
   if (which == "dimensions") {
     cat("Table with effective dimensions and penalties: \n\n")
-    print.data.frame(x)
-    cat("\n", "Total Effective Dimension:", sum(x[["Effective"]]), "\n")
+    print.data.frame(x, row.names = FALSE)
+    cat("\n", "Total Effective Dimension:", EDTot, "\n")
   } else if (which == "variances") {
     cat("Table with variances: \n\n")
-    print.data.frame(x)
+    print.data.frame(x, row.names = FALSE)
     cat("\n")
   }
 }
