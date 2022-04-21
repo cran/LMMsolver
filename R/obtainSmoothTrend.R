@@ -10,7 +10,7 @@
 #' trend should be computed. Column names should include the names used when
 #' fitting the spline model.
 #' @param includeIntercept Should the value of the intercept be included in
-#' the computed smooth trend?
+#' the computed smooth trend? Ignored if deriv > 0.
 #' @param deriv Derivative of B-splines, default 0. At the moment only
 #' implemented for spl1D.
 #' @param which An integer, for if there are multiple splxD terms in the model.
@@ -83,6 +83,13 @@ obtainSmoothTrend <- function(object,
     warning("deriv is ignored for ", splDim, "-dimensional splines.\n",
             call. = FALSE)
   }
+  if (splDim == 1 && deriv == 2) {
+    stop("Second order derivatives cannot be computed for splines of ",
+         "order 1.\n")
+  }
+  if (deriv > 0) {
+    includeIntercept <- FALSE
+  }
   if (!is.null(newdata)) {
     if (!inherits(newdata, "data.frame")) {
       stop("newdata should be a data.frame.\n")
@@ -135,14 +142,24 @@ obtainSmoothTrend <- function(object,
     mu <- 0
   }
   if (is.null(XTot)) {
-    bc <- 0
+    coefFix <- 0
   } else {
-    ## Remove leading zero, added for reference level.
-    bc <- as.vector(XTot %*% coef(object)[[splF_name]])
+    if (deriv == 0) {
+      coefFix <- as.vector(XTot %*% coef(object)[[splF_name]])
+    } else {
+      ## only for spl1D, deriv option ignored for splDim > 1
+      if (deriv == 1) {
+        ## fixed part is the slope
+        coefFix <- coef(object)[[splF_name]]
+      } else {
+        ## second derivative equal to zero
+        coefFix <- 0
+      }
+    }
   }
-  sc <- as.vector(BxTot %*% coef(object)[[splR_name]])
+  coefRan <- as.vector(BxTot %*% coef(object)[[splR_name]])
   ## Compute fitted values.
-  fit <- mu + bc + sc
+  fit <- mu + coefFix + coefRan
   ## Construct output data.frame.
   if (!is.null(newdata)) {
     outDat <- newdata
@@ -172,9 +189,13 @@ obtainSmoothTrend <- function(object,
 
     U <- Reduce(spam::cbind.spam, lU)
 
-    ## !!! NOT CHANGE THIS LINE !!!
+    ## !!! NOT CHANGE THE LINE OF CODE BELOW !!!
+    ## It adds extra zeros ("fill-ins") to matrix C, needed
+    ## to calculate the Partial Derivatives of Cholesky, not equal to zero.
     C = object$C + 0 * spam::crossprod.spam(U)
 
+    ## The Cholesky Decompositon and the partial derivatives
+    ## are calculated.
     cholC <- chol(C)
     A <- DerivCholesky(cholC)
 

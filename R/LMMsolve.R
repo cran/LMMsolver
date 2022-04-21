@@ -93,7 +93,7 @@
 #' \code{\link{spl2D}}, \code{\link{spl3D}}
 #'
 #' @importFrom stats model.frame terms model.matrix contrasts as.formula
-#' terms.formula aggregate model.response var
+#' terms.formula aggregate model.response var formula
 #'
 #' @export
 LMMsolve <- function(fixed,
@@ -123,6 +123,9 @@ LMMsolve <- function(fixed,
                   "spl1D()\", \"~ spl2D()\" or \"~spl3D()\"\n")
   if (!is.null(spline)) {
     if (!inherits(spline, "formula")) stop(splErr)
+    spline <- formula(paste((gsub(pattern = "LMMsolver::",
+                                  replacement = "",
+                                  as.character(spline))), collapse = ""))
     splTrms <- terms(spline, specials = c("spl1D", "spl2D", "spl3D"))
     splSpec <- attr(splTrms, "specials")
     if (length(terms(splTrms)) != 2 ||
