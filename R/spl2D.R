@@ -57,7 +57,8 @@ spl2D <- function(x1,
   ## Remove intercept column to avoid singularity problems.
   X <- removeIntercept(X)
   ## Construct list of sparse precision matrices.
-  lGinv <- constructGinvSplines(q, knots, pord)
+  scaleFactor <- calcScaleFactor(knots, pord)
+  lGinv <- constructGinvSplines(q, knots, pord, scaleFactor)
   names(lGinv) <- paste0("s(", xNames, ")")
   if (is.null(X)) {
     dim.f <- NULL
@@ -72,7 +73,7 @@ spl2D <- function(x1,
   return(list(X = X, Z = B12, lGinv = lGinv, knots = knots,
               dim.f = dim.f, dim.r = dim.r, term.labels.f = term.labels.f,
               term.labels.r = term.labels.r, x = xList, pord = pord,
-              degree = degree, scaleX = scaleX, EDnom = EDnom))
+              degree = degree, scaleX = scaleX, EDnom = EDnom, scaleFactor=scaleFactor))
 
 }
 

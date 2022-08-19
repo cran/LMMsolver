@@ -452,10 +452,35 @@ double logdet(SEXP arg, NumericVector lambda)
   return logdet(L, colpointers);
 }
 
+
+//' Calculate the partial derivatives of log-determinant.
+//'
+//' This function calculates the partial derivatives of the the log-determinant in an
+//' efficient way, by using reverse Automated Differentiation of the Cholesky Algorithm,
+//' see Smith (1995) for details. Let
+//'  \deqn{C = \sum_{i} \theta_i P_i}
+//' where the matrices \eqn{P_i} are stored in the `ADchol` object. The partial derivatives
+//' of matrix \eqn{C} are defined by:
+//' \deqn{\frac{\partial C}{\partial \theta_i} = \text{trace} [C^{-1} P_i]},
+//' but are calculated in a more efficient way using backwards Automated Differentiation.
+//'
+//' @param ADobj object of class ADchol.
+//' @param theta a vector with precision or penalty parameters
+//'
+//' @return The gradient with partial derivatives of \eqn{log|C|} with respect to
+//' parameters \eqn{\theta_i}. As attribute \code{logdet}, \eqn{log|C|} is returned.
+//'
+//' @references
+//' Smith, S. P. (1995). Differentiation of the Cholesky algorithm.
+//' Journal of Computational and Graphical Statistics, 4(2), 134-147.
+//'
+//' @noRd
+//' @keywords internal
+//'
 // [[Rcpp::export]]
-NumericVector dlogdet(SEXP arg, NumericVector lambda)
+NumericVector dlogdet(SEXP ADobj, NumericVector theta)
 {
-  Rcpp::S4 obj(arg);
+  Rcpp::S4 obj(ADobj);
   IntegerVector supernodes = obj.slot("supernodes");
   IntegerVector rowpointers = obj.slot("rowpointers");
   IntegerVector colpointers = obj.slot("colpointers");
@@ -467,7 +492,12 @@ NumericVector dlogdet(SEXP arg, NumericVector lambda)
 
   // define matrix L (lower triangle matrix values)
   const int sz = P.nrow();
+
   const int n_prec_mat = P.ncol();
+
+  if (n_prec_mat != theta.size()) {
+    stop("wrong length vector theta ");
+  }
 
   std::fill(L.begin(), L.end(), 0.0);
   std::fill(F.begin(), F.end(), 0.0);
@@ -475,7 +505,7 @@ NumericVector dlogdet(SEXP arg, NumericVector lambda)
   for (int k=0;k<n_prec_mat;k++)
   {
     NumericMatrix::Column Pk = P(_, k);
-    double alpha = lambda[k];
+    double alpha = theta[k];
     for (int i=0;i<sz;i++)
     {
       L[i] += alpha*Pk[i];
@@ -496,12 +526,12 @@ NumericVector dlogdet(SEXP arg, NumericVector lambda)
   }
 
   // correction, to make sure inner product
-  // between lambda and gradient equal to N:
+  // between theta and gradient equal to N:
   double sum = 0.0;
   const int N = colpointers.size()-1;
   for (int i=0;i<n_prec_mat;i++)
   {
-    sum += lambda[i]*gradient[i];
+    sum += theta[i]*gradient[i];
   }
   for (int i=0;i<n_prec_mat;i++)
   {

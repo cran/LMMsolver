@@ -73,6 +73,7 @@ obtainSmoothTrend <- function(object,
   knots <- splRes$knots
   scaleX <- splRes$scaleX
   pord <- splRes$pord
+  degree <- splRes$degree
   splDim <- length(x)
   if (splDim == 1 && (!is.numeric(deriv) || length(deriv) > 1 || deriv < 0 ||
       deriv != round(deriv))) {
@@ -83,9 +84,10 @@ obtainSmoothTrend <- function(object,
     warning("deriv is ignored for ", splDim, "-dimensional splines.\n",
             call. = FALSE)
   }
-  if (splDim == 1 && deriv == 2) {
-    stop("Second order derivatives cannot be computed for splines of ",
-         "order 1.\n")
+  if (deriv > degree) {
+    stop(deriv,
+         "-order derivatives cannot be computed for B-splines of degree ",
+         degree)
   }
   if (deriv > 0) {
     includeIntercept <- FALSE
@@ -148,9 +150,19 @@ obtainSmoothTrend <- function(object,
       coefFix <- as.vector(XTot %*% coef(object)[[splF_name]])
     } else {
       ## only for spl1D, deriv option ignored for splDim > 1
-      if (deriv == 1) {
-        ## fixed part is the slope
-        coefFix <- coef(object)[[splF_name]]
+      if (deriv == 1 & pord==2) {
+        ## calculate scaling factor alpha
+        if (scaleX) {
+          range_org <- c(attr(knots[[1]],"xmin"), attr(knots[[1]], "xmax"))
+          Bx0 <- Bsplines(knots[[1]], range_org, deriv=0)
+          U_null <- scale(seq_len(ncol(Bx0)))
+          U_null <- U_null/normVec(U_null)
+          range_sc <- Bx0 %*% U_null
+          scaleFactor <- (range_sc[2]-range_sc[1])/(range_org[2]-range_org[1])
+        } else {
+          scaleFactor <- 1.0
+        }
+        coefFix <- coef(object)[[splF_name]]*scaleFactor
       } else {
         ## second derivative equal to zero
         coefFix <- 0
@@ -169,8 +181,8 @@ obtainSmoothTrend <- function(object,
     colnames(outDat)[-ncol(outDat)] <- rev(names(x))
     outDat <- outDat[c(names(x), "ypred")]
   }
-  # only add standard errors if deriv == 0
-  if (deriv == 0) {
+  ## only add standard errors if deriv == 0 and includeIntercept
+  if (deriv == 0 & includeIntercept) {
     labels <- c(object$term.labels.f, object$term.labels.r)
     lU <- list()
     dim <- object$dim
@@ -188,21 +200,7 @@ obtainSmoothTrend <- function(object,
     lU[[ndx.r]] <- BxTot
 
     U <- Reduce(spam::cbind.spam, lU)
-
-    ## !!! NOT CHANGE THE LINE OF CODE BELOW !!!
-    ## It adds extra zeros ("fill-ins") to matrix C, needed
-    ## to calculate the Partial Derivatives of Cholesky, not equal to zero.
-    C = object$C + 0 * spam::crossprod.spam(U)
-
-    ## The Cholesky Decompositon and the partial derivatives
-    ## are calculated.
-    cholC <- chol(C)
-    A <- DerivCholesky(cholC)
-
-    ## Equivalent to v <- diag(U %*% A %*% t(U))
-    v <- spam::rowSums.spam((U %*% A) * U)
-
-    outDat[["se"]] <- sqrt(v)
+    outDat[["se"]] <- calcStandardErrors(object$C, U)
   }
   return(outDat)
 }

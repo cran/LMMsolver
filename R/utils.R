@@ -42,13 +42,23 @@ expandGinv <- function(lGinv1, lGinv2) {
   return(lGinv)
 }
 
+# calculate scale factor for precision matrices.
+# To make the penalty matrix more stable if there are many knots,
+# a scaled version is used, \eqn{(1/dx)^(2pord-1) D'D}.
+calcScaleFactor <- function(knots, pord)
+{
+  dx <- sapply(knots, function(x) { attr(x, "dx")})
+  sc <- (1/dx)^(2*pord-1)
+  sc <- ifelse(sc < 10.e-10, 1.0e-10, sc)
+  return(sc)
+}
+
 #' Construct the penalty matrix
 #'
 #' Construct a scaled version of the P-splines penalty matrix, see details.
 #'
 #' The P-spline penalty matrix has the form \eqn{D'D}, where \eqn{D} is the `pord` order
-#' difference matrix. To make the penalty matrix more stable if there are many knots,
-#' a scaled version is used, \eqn{(1/dx)^(2pord-1) D'D}.
+#' difference matrix.
 #'
 #' @param q integer with dimensions.
 #' @param pord order of the penalty.
@@ -58,11 +68,10 @@ expandGinv <- function(lGinv1, lGinv2) {
 #'
 #' @keywords internal
 constructPenalty <-function(q,
-                            pord,
-                            dx) {
+                            pord) {
   D <- spam::diff.spam(spam::diag.spam(q), diff = pord)
-  DtDsc <- spam::crossprod.spam(D)*(1/dx)^(2*pord-1)
-  return(DtDsc)
+  DtD <- spam::crossprod.spam(D)
+  return(DtD)
 }
 
 #' Construct fixed part of the spline model
@@ -131,7 +140,8 @@ constructCCt <- function(knots, pord) {
 #' @keywords internal
 constructGinvSplines <- function(q,
                                  knots,
-                                 pord) {
+                                 pord,
+                                 scaleFactor) {
   ## dimension
   d <- length(q)
   lCCt <- lapply(X = seq_len(d),
@@ -142,8 +152,7 @@ constructGinvSplines <- function(q,
     L <- list()
     for (j in seq_len(d)) {
       if (i == j) {
-        dx <- attr(knots[[j]], which="dx")
-        L[[j]] <- constructPenalty(q[j], pord = pord, dx = dx)
+        L[[j]] <- scaleFactor[j]*constructPenalty(q[j], pord = pord)
       } else {
         L[[j]] <- spam::diag.spam(q[j])
       }
@@ -186,9 +195,9 @@ calcNomEffDim <- function(X,
     ndx <- s[i]:e[i]
     Zi <- Z[, ndx]
     # if number of columns is high, use upper bound:
-    if (dim.r[i] > 100) {
-      colSum <- colSums(Zi)
-      if (all(colSum==colSum[1]))
+    if (dim.r[i] > 100 | nrow(X) > 10000) {
+      rowSum <- spam::rowSums.spam(Zi)
+      if (all(rowSum==rowSum[1]))
         EDnom[i] <- dim.r[i] - 1
       else
         EDnom[i] <- dim.r[i]

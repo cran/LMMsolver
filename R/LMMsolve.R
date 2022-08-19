@@ -187,16 +187,24 @@ LMMsolve <- function(fixed,
     mf <- model.frame(random, data, drop.unused.levels = TRUE, na.action = NULL)
     mt <- terms(mf)
     f.terms <- all.vars(mt)[attr(mt, "dataClasses") == "factor"]
-    Z1 <- model.matrix(mt, data = mf,
+    Z1 <- Matrix::sparse.model.matrix(mt, data = mf,
                        contrasts.arg = lapply(X = mf[, f.terms, drop = FALSE],
                                               FUN = contrasts,
                                               contrasts = FALSE))
     dim1.r <- table(attr(Z1, "assign"))[-1]
     term1.labels.r <- attr(mt, "term.labels")
+    scFactor1 <- rep(1, length(dim1.r))
     ## Number of variance parameters (see Gilmour 1995) for each variance component
     varPar1 <- rep(1, length(dim1.r))
-    Z1 <- Z1[, -1]
+    if (ncol(Z1) > 1) {
+      Z1 <- Z1[, -1]
+      Z1 <- spam::as.spam.dgCMatrix(Z1)
+    }
+    else {
+      Z1 <- NULL
+    }
   } else {
+    scFactor1 <- NULL
     dim1.r <- NULL
     term1.labels.r <- NULL
     Z1 <- NULL
@@ -206,18 +214,21 @@ LMMsolve <- function(fixed,
     ndx <- unlist(group)
     dim2.r <- sapply(X = group, FUN = length)
     term2.labels.r <- names(group)
+    scFactor2 <- rep(1, length(dim2.r))
     varPar2 <- rep(1, length(dim2.r))
-    Z2 <- as.matrix(data[, ndx])
+    Z2 <- spam::as.spam(as.matrix(data[, ndx]))
   } else {
     dim2.r <- NULL
     term2.labels.r <- NULL
+    scFactor2 <- NULL
     Z2 <- NULL
     varPar2 <- NULL
   }
   if (!(is.null(random) & is.null(group))) {
-    Z <- cbind(Z1, Z2)
+    Z <- spam::cbind.spam(Z1, Z2)
     dim.r <- c(dim1.r, dim2.r)
     term.labels.r <- c(term1.labels.r, term2.labels.r)
+    scFactor <- c(scFactor1, scFactor2)
     varPar <- c(varPar1, varPar2)
     e <- cumsum(dim.r)
     s <- e - dim.r + 1
@@ -233,6 +244,7 @@ LMMsolve <- function(fixed,
     lGinv <- NULL
     dim.r <- NULL
     term.labels.r <- NULL
+    scFactor <- NULL
     varPar <- NULL
   }
   ## Replace identity matrix with ginverse for random terms.
@@ -273,8 +285,10 @@ LMMsolve <- function(fixed,
     dim.f <- as.numeric(table(attr(X, "assign")))
   }
   term.labels.f <- attr(mt, "term.labels")
-  ## calculate NomEff dimension for non-spline part.
-  NomEffDimRan <- calcNomEffDim(X, Z, dim.r)
+
+  ## calculate NomEff dimension for non-spline part
+  Xs <- spam::as.spam(X)
+  NomEffDimRan <- calcNomEffDim(Xs, Z, dim.r)
   ## Add spline part.
   splResList <- NULL
   if (!is.null(spline)) {
@@ -292,7 +306,7 @@ LMMsolve <- function(fixed,
       ## Add to design matrix fixed effect X.
       X <- cbind(X, splRes$X)
       ## Add to design matrix random effect Z.
-      Z <- cbind(Z, splRes$Z)
+      Z <- spam::cbind.spam(Z, splRes$Z)
       ## Expand matrices Ginv to the updated Z.
       lGinv <- expandGinv(lGinv, splRes$lGinv)
       ## A splxD model has x parameters.
@@ -305,6 +319,7 @@ LMMsolve <- function(fixed,
       ## Add labels.
       term.labels.f <- c(term.labels.f, splRes$term.labels.f)
       term.labels.r <- c(term.labels.r, splRes$term.labels.r)
+      scFactor <- c(scFactor, splRes$scaleFactor)
     }
   }
   ## Add intercept.
@@ -313,6 +328,8 @@ LMMsolve <- function(fixed,
   }
   ## construct inverse of residual matrix R.
   lRinv <- constructRinv(df = data, residual = residual, weights = w)
+  nRes <- length(lRinv)
+  scFactor <- c(scFactor, rep(1, nRes))
   y <- model.response(mf)
   ## check whether the variance for response is not zero.
   if (is.null(residual)) {
@@ -330,8 +347,20 @@ LMMsolve <- function(fixed,
            levelsNoVar, "\n")
     }
   }
-  ## Fit models.
-  obj <- sparseMixedModels(y = y, X = X, Z = Z, lGinv = lGinv, lRinv = lRinv,
+  ## Make X sparse
+  Xs <- spam::as.spam(X)
+  ## Fit the model
+
+  if (!is.null(theta))
+  {
+    if (length(theta) != length(scFactor)) {
+      stop("Argument theta has wrong length \n")
+    }
+    theta <- theta/scFactor
+  } else {
+    theta <- 1/scFactor
+  }
+  obj <- sparseMixedModels(y = y, X = Xs, Z = Z, lGinv = lGinv, lRinv = lRinv,
                            tolerance = tolerance, trace = trace, maxit = maxit,
                            theta = theta)
   ## Add names to coefficients.
