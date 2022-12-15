@@ -1,3 +1,8 @@
+# LMMsolver 1.0.4
+
+-   Improved computation time for calculation of standard errors. Implementation in C++ and using the 'sparse inverse'. 
+-   Row-wise Kronecker product for `spam` matrices implemented in C++. Important for tensor product P-splines with improved computation time and memory allocation.  
+
 # LMMsolver 1.0.3
 
 -   Improved computation time and memory allocation, especially important for big data with many observations (the number of rows in the data frame).

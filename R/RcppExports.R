@@ -41,3 +41,11 @@ partialDerivCholesky <- function(cholC) {
     .Call(`_LMMsolver_partialDerivCholesky`, cholC)
 }
 
+diagXCinvXt <- function(cholC, transposeX) {
+    .Call(`_LMMsolver_diagXCinvXt`, cholC, transposeX)
+}
+
+RowKron <- function(sX1, sX2) {
+    .Call(`_LMMsolver_RowKron`, sX1, sX2)
+}
+

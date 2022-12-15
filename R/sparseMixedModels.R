@@ -55,7 +55,16 @@ sparseMixedModels <- function(y,
   dimMME <- p + q
   W <- spam::cbind.spam(X, Z)
   lWtRinvW <- lapply(X = lRinv, FUN = function(x) {
-    spam::crossprod.spam(W, x %*% W) })
+    d <- spam::diag.spam(x)
+    # if x is diagonal calculate x %*% W in a more efficient way
+    if (isTRUE(all.equal(spam::diag.spam(d), x))) {
+      xW <- W
+      xW@entries <- xW@entries * rep(d, times=diff(xW@rowpointers))
+    } else {
+      xW <- x %*% W
+    }
+    spam::crossprod.spam(W, xW)
+  })
   lWtRinvY <- lapply(X = lRinv, FUN = function(x) {
     spam::crossprod.spam(W, x %*% y) })
   lYtRinvY <- lapply(X =lRinv, FUN= function(x) {

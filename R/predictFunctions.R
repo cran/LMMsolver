@@ -45,15 +45,10 @@ calcStandardErrors <- function(C, D)
   C = C + 0 * spam::crossprod.spam(D)
   cholC <- chol(C)
 
-  ## calculate the partial derivatives of Cholesky
-  cholC@entries <- partialDerivCholesky(cholC)
-
-  ## convert to spam object and put in original order
-  A <- spam::as.spam(cholC)
-  A <- A[cholC@invpivot, cholC@invpivot]
-
-  ## Equivalent to v <- diag(D %*% A %*% t(D))
-  x <- spam::rowSums.spam((D %*% A) * D)
+  p <- cholC@pivot
+  tD <- t(D)
+  tDp <- tD[p, ]
+  x <- diagXCinvXt(cholC, tDp)
   se <- sqrt(x)
   return(se)
 }

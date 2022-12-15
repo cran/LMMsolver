@@ -16,6 +16,7 @@
 #include <vector>
 #include "AuxFun.h"
 #include "NodeList.h"
+#include "SparseMatrix.h"
 
 using namespace Rcpp;
 using namespace std;
@@ -569,5 +570,116 @@ NumericVector partialDerivCholesky(SEXP cholC)
   return F;
 }
 
+void updateH(NumericVector& H, const SparseMatrix& tX, int i, int j, double alpha)
+{
+  int s1 = tX.rowpointers[i];
+  int e1 = tX.rowpointers[i+1];
 
+  int s2 = tX.rowpointers[j];
+  int e2 = tX.rowpointers[j+1];
 
+  while (s1 != e1 && s2 != e2)
+  {
+    if (tX.colindices[s1] < tX.colindices[s2]) ++s1;
+    else if (tX.colindices[s1] > tX.colindices[s2]) ++s2;
+    else {
+      int ndx = tX.colindices[s1]; // = tD.colindices[2]
+      H[ndx] += tX.entries[s1]*tX.entries[s2]*alpha;
+      ++s1;
+      ++s2;
+    }
+  }
+}
+
+// [[Rcpp::export]]
+NumericVector diagXCinvXt(SEXP cholC, SEXP transposeX)
+{
+  Rcpp::S4 obj(cholC);
+  SparseMatrix tX(transposeX);
+  const int nPred = tX.dim[1];
+
+  // We use transpose for calculating Automated Differentiation.
+  IntegerVector supernodes = Rcpp::clone<Rcpp::IntegerVector>(obj.slot("supernodes"));
+  IntegerVector colpointers = Rcpp::clone<Rcpp::IntegerVector>(obj.slot("rowpointers"));
+  IntegerVector rowpointers = Rcpp::clone<Rcpp::IntegerVector>(obj.slot("colpointers"));
+  IntegerVector rowindices = Rcpp::clone<Rcpp::IntegerVector>(obj.slot("colindices"));
+  NumericVector L = Rcpp::clone<Rcpp::NumericVector>(obj.slot("entries"));
+
+  // C using indices starting at 0:
+  transf2C(supernodes);
+  transf2C(colpointers);
+  transf2C(rowpointers);
+  transf2C(rowindices);
+
+  const int sz = L.size();
+  NumericVector F(sz, 0.0);
+  initAD(F, L, colpointers);
+  ADcholesky(F, L, supernodes, rowpointers, colpointers, rowindices);
+
+  NumericVector H(nPred, 0.0);
+
+  const int Nsupernodes = supernodes.size()-1;
+  for (int J=0; J<Nsupernodes;J++)
+  {
+    int s = rowpointers[J];
+    for (int j=supernodes[J]; j<supernodes[J+1]; j++)
+    {
+      int k = s;
+      for (int ndx = colpointers[j]; ndx < colpointers[j+1]; ndx++)
+      {
+        int i = rowindices[k++];
+        double alpha = F[ndx];
+        updateH(H, tX, i, j, alpha);
+      }
+      s++;
+    }
+  }
+  return H;
+}
+
+/*
+
+Not used, just to show the structure of the sparse cholesky matrix with supernodes.
+
+// [[Rcpp::export]]
+NumericMatrix PrintCholesky(SEXP cholC)
+{
+  Rcpp::S4 obj(cholC);
+  // We use transpose for calculating Automated Differentiation.
+  IntegerVector supernodes = Rcpp::clone<Rcpp::IntegerVector>(obj.slot("supernodes"));
+  IntegerVector colpointers = Rcpp::clone<Rcpp::IntegerVector>(obj.slot("rowpointers"));
+  IntegerVector rowpointers = Rcpp::clone<Rcpp::IntegerVector>(obj.slot("colpointers"));
+  IntegerVector rowindices = Rcpp::clone<Rcpp::IntegerVector>(obj.slot("colindices"));
+  NumericVector L = Rcpp::clone<Rcpp::NumericVector>(obj.slot("entries"));
+
+  // C using indices starting at 0:
+  transf2C(supernodes);
+  transf2C(colpointers);
+  transf2C(rowpointers);
+  transf2C(rowindices);
+
+  const int Nsupernodes = supernodes.size()-1;
+  const int N = colpointers.size() - 1;
+  NumericMatrix A(N, N);
+  for (int J=0; J<Nsupernodes;J++)
+  {
+    int s = rowpointers[J];
+    Rcout << "Supernode: " << J << endl;
+    for (int j=supernodes[J]; j<supernodes[J+1]; j++)
+    {
+      Rcout << "  Column: " << j << endl;
+      int k = s;
+      for (int ndx = colpointers[j]; ndx < colpointers[j+1]; ndx++)
+      {
+        int i = rowindices[k++];
+        Rcout << "    row: " << i << " (ndx or key " << ndx << ")" << endl;
+        A(i, j) = L[ndx];
+      }
+      s++;
+    }
+  }
+
+  return A;
+}
+
+*/
