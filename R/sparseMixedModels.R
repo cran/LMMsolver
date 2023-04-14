@@ -45,7 +45,8 @@ sparseMixedModels <- function(y,
                               maxit = 100,
                               tolerance = 1.0e-6,
                               trace = FALSE,
-                              theta = NULL) {
+                              theta = NULL,
+                              fixedTheta = NULL) {
   Ntot <- length(y)
   p <- ncol(X)
   q <- ncol(Z)
@@ -84,6 +85,10 @@ sparseMixedModels <- function(y,
   if (is.null(theta)) {
     theta <- rep(1, Nvarcomp + Nres)
   }
+  if (is.null(fixedTheta)) {
+    ## Fix a penalty theta, if value becomes high.
+    fixedTheta <- rep(FALSE, length = NvarcompTot)
+  }
   if (Nvarcomp > 0) {
     psi <- theta[1:Nvarcomp]
     phi <- theta[-(1:Nvarcomp)]
@@ -91,17 +96,14 @@ sparseMixedModels <- function(y,
     psi <- NULL
     phi <- theta
   }
-  C <- linearSum(theta = theta, matrixList = lC)
-  opt <- summary(C)
-  cholC <- chol(C, memory = list(nnzR = 8 * opt$nnz,
-                                 nnzcolindices = 4 * opt$nnz))
 
   ## Check the stucture of Rinv, don't allow for overlapping
   ## penalties
   M <- sapply(lRinv,FUN=function(x) {
     as.integer(abs(spam::diag.spam(x))>getOption("spam.eps"))})
   rSums <- rowSums(M)
-  if (!isTRUE(all.equal(rSums, rep(1, nrow(M))))) {
+  #if (!isTRUE(all.equal(rSums, rep(1, nrow(M))))) {
+  if (max(rSums) > 1) {
     stop("overlapping penalties for residual part") }
 
   # calculate number of elements per group for residuals
@@ -119,8 +121,6 @@ sparseMixedModels <- function(y,
   ADcholC <- ADchol(lC)
   ## Initialize values for loop.
   logLprev <- Inf
-  ## Fix a penalty theta, if value becomes high.
-  fixedTheta <- rep(FALSE, length = NvarcompTot)
   if (trace) {
     cat("iter logLik\n")
   }
@@ -144,9 +144,14 @@ sparseMixedModels <- function(y,
     } else {
       logdetG <- 0
     }
+    ## update the expressions including Rinv
+    YtRinvY <- sum(phi * unlist(lYtRinvY))
+    WtRinvY <- as.vector(linearSum(theta = phi, matrixList = lWtRinvY))
+
     ## matrix C
-    dlogdetC <- dlogdet(ADcholC, theta)
+    dlogdetC <- dlogdet(ADcholC, theta, WtRinvY)
     logdetC <- attr(dlogdetC, which = "logdet")
+    a <- attr(dlogdetC,which="x.coef")
 
     ## calculate effective dimensions.
     if (!is.null(ADcholGinv)) {
@@ -157,14 +162,8 @@ sparseMixedModels <- function(y,
     EDmax <- c(EDmax_psi, EDmax_phi)
     ED <- EDmax - theta * dlogdetC
 
-    ## update the cholesky with new parameters theta
-    C <- linearSum(theta = theta, matrixList = lC)
-    cholC <- update(cholC, C)
-
-    ## update the expressions including Rinv
-    YtRinvY <- sum(phi * unlist(lYtRinvY))
-    WtRinvY <- as.vector(linearSum(theta = phi, matrixList = lWtRinvY))
-    a <- spam::backsolve.spam(cholC, spam::forwardsolve.spam(cholC, WtRinvY))
+    ## to make sure ED is always positive
+    ED <- pmax(ED, .Machine$double.eps)
 
     ## calculate Sum of Squares
     SS_all <- calcSumSquares(lYtRinvY, lWtRinvY, lWtRinvW, lQ, a, Nvarcomp)
@@ -184,12 +183,19 @@ sparseMixedModels <- function(y,
     ## Update the penalties theta that are not fixed.
     theta <- ifelse(fixedTheta, theta, ED / SS_all)
     ## Set elements of theta fixed if penalty > 1.0e6.
-    fixedTheta <- theta > 1.0e6
+    fixedTheta <- (theta > 1.0e6) | (fixedTheta == TRUE)
     logLprev <- logL
   }
   if (it == maxit) {
     warning("No convergence after ", maxit, " iterations \n", call. = FALSE)
   }
+
+  ## MB: not really needed, just to keep consistent with previous versions.
+  C <- linearSum(theta = theta, matrixList = lC)
+  opt <- summary(C)
+  cholC <- chol(C, memory = list(nnzR = 8 * opt$nnz,
+                                 nnzcolindices = 4 * opt$nnz))
+
   ## calculate yhat and residuals
   yhat <- W %*% a
   r <- y - yhat

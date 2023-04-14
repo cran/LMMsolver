@@ -35,14 +35,15 @@ BEGIN_RCPP
 END_RCPP
 }
 // dlogdet
-NumericVector dlogdet(SEXP ADobj, NumericVector theta);
-RcppExport SEXP _LMMsolver_dlogdet(SEXP ADobjSEXP, SEXP thetaSEXP) {
+NumericVector dlogdet(SEXP ADobj, NumericVector theta, Nullable<NumericVector> b_);
+RcppExport SEXP _LMMsolver_dlogdet(SEXP ADobjSEXP, SEXP thetaSEXP, SEXP b_SEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type ADobj(ADobjSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type theta(thetaSEXP);
-    rcpp_result_gen = Rcpp::wrap(dlogdet(ADobj, theta));
+    Rcpp::traits::input_parameter< Nullable<NumericVector> >::type b_(b_SEXP);
+    rcpp_result_gen = Rcpp::wrap(dlogdet(ADobj, theta, b_));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -69,6 +70,30 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// ForwardCholesky
+NumericVector ForwardCholesky(SEXP cholC, NumericVector& b);
+RcppExport SEXP _LMMsolver_ForwardCholesky(SEXP cholCSEXP, SEXP bSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type cholC(cholCSEXP);
+    Rcpp::traits::input_parameter< NumericVector& >::type b(bSEXP);
+    rcpp_result_gen = Rcpp::wrap(ForwardCholesky(cholC, b));
+    return rcpp_result_gen;
+END_RCPP
+}
+// BackwardCholesky
+NumericVector BackwardCholesky(SEXP cholC, NumericVector& b);
+RcppExport SEXP _LMMsolver_BackwardCholesky(SEXP cholCSEXP, SEXP bSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type cholC(cholCSEXP);
+    Rcpp::traits::input_parameter< NumericVector& >::type b(bSEXP);
+    rcpp_result_gen = Rcpp::wrap(BackwardCholesky(cholC, b));
+    return rcpp_result_gen;
+END_RCPP
+}
 // RowKron
 List RowKron(SEXP sX1, SEXP sX2);
 RcppExport SEXP _LMMsolver_RowKron(SEXP sX1SEXP, SEXP sX2SEXP) {
@@ -85,9 +110,11 @@ END_RCPP
 static const R_CallMethodDef CallEntries[] = {
     {"_LMMsolver_construct_ADchol_Rcpp", (DL_FUNC) &_LMMsolver_construct_ADchol_Rcpp, 2},
     {"_LMMsolver_logdet", (DL_FUNC) &_LMMsolver_logdet, 2},
-    {"_LMMsolver_dlogdet", (DL_FUNC) &_LMMsolver_dlogdet, 2},
+    {"_LMMsolver_dlogdet", (DL_FUNC) &_LMMsolver_dlogdet, 3},
     {"_LMMsolver_partialDerivCholesky", (DL_FUNC) &_LMMsolver_partialDerivCholesky, 1},
     {"_LMMsolver_diagXCinvXt", (DL_FUNC) &_LMMsolver_diagXCinvXt, 2},
+    {"_LMMsolver_ForwardCholesky", (DL_FUNC) &_LMMsolver_ForwardCholesky, 2},
+    {"_LMMsolver_BackwardCholesky", (DL_FUNC) &_LMMsolver_BackwardCholesky, 2},
     {"_LMMsolver_RowKron", (DL_FUNC) &_LMMsolver_RowKron, 2},
     {NULL, NULL, 0}
 };

@@ -14,10 +14,16 @@
 #' \item{varPar}{The number of variance parameters for each variance component}
 #' \item{VarDf}{The table with variance components}
 #' \item{theta}{The precision parameters}
-#' \item{coefficients}{The estimated effects from the mixed model equations}
+#' \item{coefMME}{A vector with all the estimated effects from mixed model equations}
+#' \item{ndxCoefficients}{The indices of the coefficients with the names}
 #' \item{yhat}{The fitted values}
 #' \item{residuals}{The residuals}
 #' \item{nIter}{The number of iterations for the mixed model to converge}
+#' \item{y}{Response variable}
+#' \item{X}{The design matrix for the fixed part of the mixed model}
+#' \item{Z}{The design matrix for the random part of the mixed model}
+#' \item{lGinv}{List with precision matrices for the random terms}
+#' \item{lRinv}{List with precision matrices for the residual}
 #' \item{C}{The mixed model coefficient matrix after last iteration}
 #' \item{cholC}{The cholesky decomposition of coefficient matrix C}
 #' \item{constantREML}{The REML constant}
@@ -26,6 +32,7 @@
 #' \item{term.labels.f}{The names of the fixed terms in the mixed model}
 #' \item{term.labels.r}{The names of the random terms in the mixed model}
 #' \item{splRes}{An object with definition of spline argument}
+#' \item{family}{An object of class family specifying the distribution and link function}.
 #'
 #' @usage NULL
 #'
@@ -38,10 +45,16 @@ LMMsolveObject <- function(logL,
                            varPar,
                            VarDf,
                            theta,
-                           coefficients,
+                           coefMME,
+                           ndxCoefficients,
                            yhat,
                            residuals,
                            nIter,
+                           y,
+                           X,
+                           Z,
+                           lGinv,
+                           lRinv,
                            C,
                            cholC,
                            constantREML,
@@ -49,7 +62,8 @@ LMMsolveObject <- function(logL,
                            Nres,
                            term.labels.f,
                            term.labels.r,
-                           splRes) {
+                           splRes,
+                           family) {
   structure(list(logL = logL,
                  sigma2e = sigma2e,
                  tau2e = tau2e,
@@ -57,18 +71,25 @@ LMMsolveObject <- function(logL,
                  varPar = varPar,
                  VarDf = VarDf,
                  theta = theta,
-                 coefficients = coefficients,
+                 coefMME = coefMME,
+                 ndxCoefficients = ndxCoefficients,
                  yhat = yhat,
                  residuals = residuals,
                  nIter = nIter,
-                 C = C,
+                 y = y,
+                 X = X,
+                 Z = Z,
+                 lGinv = lGinv,
+                 lRinv = lRinv,
                  cholC = cholC,
+                 C = C,
                  constantREML = constantREML,
                  dim = dim,
                  Nres = Nres,
                  term.labels.f = term.labels.f,
                  term.labels.r = term.labels.r,
-                 splRes = splRes),
+                 splRes = splRes,
+                 family = family),
             class = c("LMMsolve", "list"))
 }
 
@@ -150,6 +171,7 @@ print.summary.LMMsolve <- function(x,
 #' Obtain the coefficients from the mixed model equations of an LMMsolve object.
 #'
 #' @param object an object of class LMMsolve
+#' @param se calculate standard errors, default FALSE.
 #' @param \dots some methods for this generic require additional arguments.
 #' None are used in this method.
 #'
@@ -168,12 +190,41 @@ print.summary.LMMsolve <- function(x,
 #' ## Obtain coefficients.
 #' coefs1 <- coef(LMM1)
 #'
+#' ## Obtain coefficients with standard errors.
+#' coefs2 <- coef(LMM1, se = TRUE)
+#'
 #' @importFrom stats coef
 #'
 #' @export
 coef.LMMsolve <- function(object,
+                          se = FALSE,
                           ...) {
-  return(object$coefficients)
+  u <- object$coefMME
+  cf <- object$ndxCoefficients
+  ## if not standard errors.
+  if (!se) {
+    coef <- lapply(X = cf, FUN = function(x) {
+      ndx <- x != 0
+      x[ndx] <- u[x[ndx]]
+      return(x)
+    })
+  } else {
+    ## if standard errors.
+    n <- length(u)
+    se <- calcStandardErrors(C = object$C,
+                             D = spam::diag.spam(x = 1, nrow = n))
+    coef <- lapply(X = cf, FUN = function(x) {
+      x_se <- rep(NA, times = length(x))
+      ndx <- x != 0
+      xNdx <- x[ndx]
+      x[ndx] <- u[xNdx]
+      x_se[ndx] <- se[xNdx]
+      df <- data.frame(coef = names(x), value = x, se = x_se,
+                       zRatio = x / x_se, row.names = NULL)
+      return(df)
+    })
+  }
+  return(coef)
 }
 
 #' Fitted values of an LMMsolve object.
@@ -222,7 +273,7 @@ fitted.LMMsolve <- function(object,
 #'
 #' @export
 residuals.LMMsolve <- function(object,
-                            ...) {
+                               ...) {
   return(as.vector(object$residuals))
 }
 

@@ -33,8 +33,8 @@ logdet <- function(arg, lambda) {
 #' @noRd
 #' @keywords internal
 #'
-dlogdet <- function(ADobj, theta) {
-    .Call(`_LMMsolver_dlogdet`, ADobj, theta)
+dlogdet <- function(ADobj, theta, b_ = NULL) {
+    .Call(`_LMMsolver_dlogdet`, ADobj, theta, b_)
 }
 
 partialDerivCholesky <- function(cholC) {
@@ -43,6 +43,14 @@ partialDerivCholesky <- function(cholC) {
 
 diagXCinvXt <- function(cholC, transposeX) {
     .Call(`_LMMsolver_diagXCinvXt`, cholC, transposeX)
+}
+
+ForwardCholesky <- function(cholC, b) {
+    .Call(`_LMMsolver_ForwardCholesky`, cholC, b)
+}
+
+BackwardCholesky <- function(cholC, b) {
+    .Call(`_LMMsolver_BackwardCholesky`, cholC, b)
 }
 
 RowKron <- function(sX1, sX2) {

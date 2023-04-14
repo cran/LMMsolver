@@ -4,6 +4,7 @@
 #'
 #' @return norm of vector x
 #'
+#' @noRd
 #' @keywords internal
 normVec <- function(x) {
   return(sqrt(sum(x ^ 2)))
@@ -21,8 +22,10 @@ normVec <- function(x) {
 #' @param lGinv1 a list of sparse matrices.
 #' @param lGinv2 a list of sparse matrices.
 #'
+#' @noRd
 #' @keywords internal
-expandGinv <- function(lGinv1, lGinv2) {
+expandGinv <- function(lGinv1,
+                       lGinv2) {
   if (is.null(lGinv1)) return(lGinv2)
   if (is.null(lGinv2)) return(lGinv1)
 
@@ -42,14 +45,18 @@ expandGinv <- function(lGinv1, lGinv2) {
   return(lGinv)
 }
 
-# calculate scale factor for precision matrices.
-# To make the penalty matrix more stable if there are many knots,
-# a scaled version is used, \eqn{(1/dx)^(2pord-1) D'D}.
-calcScaleFactor <- function(knots, pord)
-{
-  dx <- sapply(knots, function(x) { attr(x, "dx")})
-  sc <- (1/dx)^(2*pord-1)
-  sc <- ifelse(sc < 10.e-10, 1.0e-10, sc)
+#' Calculate scale factor for precision matrices.
+#'
+#' To make the penalty matrix more stable if there are many knots,
+#' a scaled version is used, \eqn{(1/dx)^(2pord-1) D'D}.
+#'
+#' @noRd
+#' @keywords internal
+calcScaleFactor <- function(knots,
+                            pord) {
+  dx <- sapply(X = knots, FUN = attr, which = "dx")
+  sc <- (1 / dx)^(2 * pord - 1)
+  sc <- ifelse(sc < 1e-10, 1e-10, sc)
   return(sc)
 }
 
@@ -57,8 +64,8 @@ calcScaleFactor <- function(knots, pord)
 #'
 #' Construct a scaled version of the P-splines penalty matrix, see details.
 #'
-#' The P-spline penalty matrix has the form \eqn{D'D}, where \eqn{D} is the `pord` order
-#' difference matrix.
+#' The P-spline penalty matrix has the form \eqn{D'D}, where \eqn{D} is the
+#' `pord` order difference matrix.
 #'
 #' @param q integer with dimensions.
 #' @param pord order of the penalty.
@@ -66,43 +73,54 @@ calcScaleFactor <- function(knots, pord)
 #'
 #' @return qxq penalty matrix of class spam
 #'
+#' @noRd
 #' @keywords internal
-constructPenalty <-function(q,
-                            pord) {
+constructPenalty <- function(q,
+                             pord) {
   D <- spam::diff.spam(spam::diag.spam(q), diff = pord)
   DtD <- spam::crossprod.spam(D)
   return(DtD)
 }
 
-#' Construct fixed part of the spline model
+#' Consruct Greville points,
 #'
-#' @param B matrix with B-spline basis.
-#' @param x vector with values for x.
-#' @param scaleX logical. If scaleX is FALSE, the original x is used. If scaleX
-#' is TRUE, scaling is used, based on the B-splines basis. For details see
-#' the code.
-#' @param pord order of the penalty, values 1 or 2.
-#'
-#' @return a matrix X
-#'
+#' The Greville points \eqn{\xi_{1,j,d}} are defined by
+#' \deqn{\xi_{i,j,p} = \frac{x_{j+1} + \ldots + x_{j+d}}{d}}
+#' see Tom Lyche et al.
+#' @noRd
 #' @keywords internal
-constructX <- function(B,
-                       x,
+GrevillePoints <- function(knots) {
+  d <- attr(knots,"degree")
+  q <- length(knots) - (d + 1)
+  sapply(X = c(1:q), FUN = function(j) { sum(knots[(j+1):(j+d)]) / d })
+}
+
+#' Construct G, such that BG = X
+#'
+#' @noRd
+#' @keywords internal
+constructG <- function(knots,
                        scaleX,
                        pord) {
   if (pord == 2) {
+    xi <- GrevillePoints(knots)
+    G <- cbind(1, xi)
     if (scaleX) {
-      ## calculate the linear/fixed parts.
-      U_null <- cbind(1, scale(seq_len(ncol(B))))
-      U_null <- apply(U_null, MARGIN = 2, function(x) (x / normVec(x)))
-      X <- B %*% U_null
-    } else {
-      X <- cbind(1, x)
+      q <- length(xi)
+      xi_mn <- mean(xi)
+      alpha <- normVec(xi-xi_mn)
+      K <- matrix(data=c(1/sqrt(q),0,-xi_mn/alpha,1/alpha),nrow=2,ncol=2)
+      G <- G %*% K
     }
-  } else {  # pord = 1
-    X <- matrix(data = 1, nrow = length(x), ncol = 1)
+  } else { # pord==1
+    d <- attr(knots,"degree")
+    q <- length(knots) - (d + 1)
+    G <- matrix(data=1, nrow=q, ncol=1)
+    if (scaleX) {
+      G <- (1/sqrt(q))*G
+    }
   }
-  X
+  return(G)
 }
 
 #' Construct constraint matrix
@@ -112,20 +130,21 @@ constructX <- function(B,
 #'
 #' @return a q x q matrix of type spam
 #'
+#' @noRd
 #' @keywords internal
-constructCCt <- function(knots, pord) {
-  xmin <- attr(knots, which="xmin")
-  xmax <- attr(knots, which="xmax")
+constructCCt <- function(knots,
+                         pord) {
+  xmin <- attr(knots, which = "xmin")
+  xmax <- attr(knots, which = "xmax")
   # if pord == 1 take point halfway, otherwise the
   # begin and endpoint of B-spline basis:
   if (pord == 1) {
-    x <- 0.5*(xmin+xmax)
-  }
-  else {
-    x <- c(xmin,xmax)
+    x <- 0.5 * (xmin + xmax)
+  } else {
+    x <- c(xmin, xmax)
   }
   Bx <- Bsplines(knots, x)
-  CCt <- t(Bx) %*% Bx
+  CCt <- spam::crossprod.spam(Bx)
   return(CCt)
 }
 
@@ -137,6 +156,7 @@ constructCCt <- function(knots, pord) {
 #'
 #' @return a list of symmetric matrices of length of vector q.
 #'
+#' @noRd
 #' @keywords internal
 constructGinvSplines <- function(q,
                                  knots,
@@ -169,6 +189,7 @@ constructGinvSplines <- function(q,
 #'
 #' @return a matrix if \code{X} has more than one column, otherwise return NULL
 #'
+#' @noRd
 #' @keywords internal
 removeIntercept <- function(X) {
   if (ncol(X) == 1) {
@@ -181,10 +202,12 @@ removeIntercept <- function(X) {
 
 #' Calculate the Nominal Effective dimension
 #'
+#' @noRd
 #' @keywords internal
 calcNomEffDim <- function(X,
                           Z,
-                          dim.r) {
+                          dim.r,
+                          term.labels.r) {
   if (is.null(Z)) return(NULL)
   p <- ncol(X)
   EDnom <- vector(length = length(dim.r))
@@ -197,13 +220,19 @@ calcNomEffDim <- function(X,
     # if number of columns is high, use upper bound:
     if (dim.r[i] > 100 | nrow(X) > 10000) {
       rowSum <- spam::rowSums.spam(Zi)
-      if (all(rowSum==rowSum[1]))
+      if (all(rowSum == rowSum[1])) {
         EDnom[i] <- dim.r[i] - 1
-      else
+      } else {
         EDnom[i] <- dim.r[i]
+      }
     } else {
       XZ <- cbind(X, Zi)
       r <- qr(XZ)$rank
+      if (r==p) {
+        msg <- paste("Singularity problem with term", term.labels.r[i],
+                     "in the random part of the model")
+        stop(msg)
+      }
       EDnom[i] <- r - p
     }
   }
@@ -217,16 +246,18 @@ calcNomEffDim <- function(X,
 #'
 #' @importFrom utils hasName
 #'
+#' @noRd
 #' @keywords internal
 checkFormVars <- function(formula,
-                          data) {
+                          data,
+                          naAllowed = TRUE) {
   if (!is.null(formula)) {
     ## Get variables in formula.
     formVars <- all.vars(formula)
+    ## Get the name of formula as passed to the function.
+    formName <- deparse(substitute(formula))
     missVars <- formVars[!hasName(data, formVars)]
     if (length(missVars) > 0) {
-      ## Get the name of formula as passed to the function.
-      formName <- deparse(substitute(formula))
       stop("The following variables in the ", formName, " part of the model ",
            "are not in the data:\n", paste0(missVars, collapse = ", "), "\n",
            call. = FALSE)
@@ -238,10 +269,27 @@ checkFormVars <- function(formula,
       })]
       if (length(naVars) > 0) {
         ## Get the name of formula as passed to the function.
-        formName <- deparse(substitute(formula))
         stop("The following variables in the ", formName, " part of the model ",
              "only have missing values:\n",
              paste0(naVars, collapse = ", "), "\n", call. = FALSE)
+      }
+      ## Check that variables have no NA values.
+      if (!naAllowed) {
+        ## NA allowed in response variable.
+        respVar <- formVars[attr(terms(formula), "response")]
+        nonRespVars <- setdiff(formVars, respVar)
+        if (length(nonRespVars) > 0) {
+          anyNaVars <- nonRespVars[sapply(X = nonRespVars,
+                                          FUN = function(nonRespVar) {
+                                            any(is.na(data[[nonRespVar]]))
+                                          })]
+          if (length(anyNaVars) > 0) {
+            ## Get the name of formula as passed to the function.
+            stop("The following variables in the ", formName,
+                 " part of the model have missing values:\n",
+                 paste0(anyNaVars, collapse = ", "), "\n", call. = FALSE)
+          }
+        }
       }
       for (formVar in formVars) {
         if (is.character(data[[formVar]])) {
@@ -265,11 +313,19 @@ grp <- function(x) {
 #'
 #' @importFrom utils hasName
 #'
+#' @noRd
 #' @keywords internal
 checkGroup <- function(random,
-                       group) {
+                       group,
+                       data) {
   ## Only check if at least one of random and group is not NULL.
   if (!is.null(random) || !is.null(group)) {
+    ## Check that all columns in group are in data.
+    groupCols <- unlist(group)
+    if (any(groupCols < 1) || any(groupCols > ncol(data))) {
+      stop("All columns specified in group should be columns in data.\n",
+           call. = FALSE)
+    }
     if (is.null(random)) {
       grpVars <- NULL
     } else {
@@ -308,9 +364,10 @@ checkGroup <- function(random,
 
 #' Helper function for naming coefficients.
 #'
+#' @noRd
 #' @keywords internal
 nameCoefs <- function(coefs,
-                      desMat,
+                      desMat = NULL,
                       termLabels,
                       s,
                       e,
@@ -328,8 +385,9 @@ nameCoefs <- function(coefs,
       if (labI == "(Intercept)") {
         names(coefI) <- "(Intercept)"
       } else if (startsWith(x = labI, prefix = "lin(") ||
-                 startsWith(x = labI, prefix = "s(")) {
-        ## Spline terms are just named 1...n.
+                 startsWith(x = labI, prefix = "s(") ||
+                 startsWith(x = labI, prefix = "cf(")) {
+        ## Spline and (cf) terms are just named 1...n.
         names(coefI) <- paste0(labI, "_", seq_along(coefI))
       } else if (!is.null(group) && labI %in% names(group)) {
         ## For group combine group name and column name.
@@ -339,48 +397,117 @@ nameCoefs <- function(coefs,
         if (type == "fixed") {
           coefI <- c(0, coefI)
         }
-        names(coefI) <- paste(labI, levels(data[[labI]]), sep = "_")
+        coefINames <- paste(labI, levels(data[[labI]]), sep = "_")
+        ## Restrict to names in design matrix.
+        if (!is.null(desMat)) {
+          coefINames <-
+            c(coefINames[1],
+              coefINames[paste0(labI,
+                                levels(data[[labI]])) %in% colnames(desMat)])
+        }
+        names(coefI) <- coefINames
       } else {
         ## Numerical variable. Name equal to label.
         names(coefI) <- labI
       }
     } else {
       ## Interaction term.
-      if (all(sapply(X = labISplit, FUN = function(labTerm) {
-        is.factor(data[[labTerm]])
-      }))) {
-        labDat <- unique(data[labISplit])
-        labDat <- lapply(X = seq_along(labDat), FUN = function(i) {
-          paste0(labISplit[i], "_", labDat[[i]])
-        })
-        if (type == "fixed") {
-          labDatAlt <- lapply(X = labDat, FUN = function(i) {
-            gsub("_", "", i)
-          })
-          interAcLevsIAlt <- levels(interaction(labDatAlt, sep = ":",
-                                                drop = TRUE))
-          interAcLevsI <- levels(interaction(labDat, sep = ":", drop = TRUE))
-          ## For fixed terms an extra 0 for the reference levels have to be added.
-          coefI <- c(rep(0, times = length(interAcLevsIAlt) - length(coefI)),
-                     coefI)
-          ## Zeros correspond to missing columns from design matrix.
-          ## Non-zeros to columns that are present in design matrix.
-          names(coefI) <- c(interAcLevsI[!interAcLevsIAlt %in% colnames(desMat)],
-                            interAcLevsI[interAcLevsIAlt %in% colnames(desMat)])
-          ## Reorder.
-          coefI <- coefI[interAcLevsI]
-          names(coefI) <- levels(interaction(labDat, sep = ":", drop = TRUE))
-        } else {
-          names(coefI) <- levels(interaction(labDat, sep = ":", drop = FALSE))
-        }
+      ## Factors and non-factors in term have to be treated differently.
+      isFactLab <- sapply(X = data[, labISplit], FUN = is.factor)
+      labDatFact <- unique(data[names(isFactLab)[isFactLab]])
+      labDatNonFact <- names(isFactLab)[!isFactLab]
+      if (length(labDatNonFact) > 0) {
+        labDat <- cbind(labDatFact, labDatNonFact)
+        colnames(labDat) <- c(colnames(labDatFact), labDatNonFact)
+        labDat <- labDat[labISplit]
       } else {
-        ## Numerical variable. Name equal to label.
-        names(coefI) <- labI
+        labDat <- labDatFact
+      }
+      labDat <- lapply(X = seq_along(labDat), FUN = function(i) {
+        if (isFactLab[i]) {
+          paste0(labISplit[i], "_", labDat[[i]])
+        } else {
+          labDat[[i]]
+        }
+      })
+      if (type == "fixed") {
+        labDatAlt <- lapply(X = labDat, FUN = function(i) {
+          gsub("_", "", i)
+        })
+        interAcLevsIAlt <- levels(interaction(labDatAlt, sep = ":",
+                                              drop = TRUE))
+        interAcLevsI <- levels(interaction(labDat, sep = ":", drop = TRUE))
+        ## For fixed terms an extra 0 for the reference levels have to be added.
+        coefI <- c(rep(0, times = length(interAcLevsIAlt) - length(coefI)),
+                   coefI)
+        ## Zeros correspond to missing columns from design matrix.
+        ## Non-zeros to columns that are present in design matrix.
+        names(coefI) <- c(interAcLevsI[!interAcLevsIAlt %in% colnames(desMat)],
+                          interAcLevsI[interAcLevsIAlt %in% colnames(desMat)])
+        ## Reorder.
+        coefI <- coefI[interAcLevsI]
+        names(coefI) <- levels(interaction(labDat, sep = ":", drop = TRUE))
+      } else {
+        names(coefI) <- levels(interaction(labDat, sep = ":", drop = FALSE))
       }
     }
     coefRes[[i]] <- coefI
   }
   return(coefRes)
 }
+
+#' Helper function to check Conditional Factor
+#' Gives an error if syntax not correct, otherwise returns a boolean:
+#' TRUE if a conditional factor is used, otherwise FALSE.
+#'
+#' @noRd
+#' @keywords internal
+checkConditionalFactor <- function(var,
+                                   cond,
+                                   level) {
+  ## if conditional factor is defined
+  vName <- deparse(substitute(var, env = parent.frame()))
+  cName <- deparse(substitute(cond, env = parent.frame()))
+  conditional <- FALSE
+  if (vName != "NULL") {
+    if (inherits(try(var, silent = TRUE), "try-error")) {
+      stop(vName, " should be a variable in data.\n", call. = FALSE)
+    }
+  }
+  if (cName != "NULL") {
+    if (inherits(try(cond, silent = TRUE), "try-error") || is.null(cond)) {
+      stop(cName, " should be a variable in data.\n", call. = FALSE)
+    }
+    if (!is.factor(cond)) {
+      stop("cond should be a factor.\n", call. = FALSE)
+    }
+    if (is.null(level)) {
+      stop("level should be defined.\n", call. = FALSE)
+    }
+    if (!(level %in% levels(cond))) {
+      stop(level, " is not a level of ", cName, ".\n", call. = FALSE)
+    }
+    conditional <- TRUE
+  }
+  return(conditional)
+}
+
+#' Extend the Spam matrix with extra zero rows.
+#'
+#' @noRd
+#' @keywords internal
+extSpamMatrix <- function(X,
+                          s,
+                          N) {
+  rPtr <- rep(0, N)
+  rPtr[s] <- diff(X@rowpointers, differences = 1)
+  rPtr <- c(0, rPtr)
+  rPtr <- cumsum(rPtr) + 1
+  ## change the slots of X.
+  X@dimension[1] <- N
+  X@rowpointers <- rPtr
+  return(X)
+}
+
 
 

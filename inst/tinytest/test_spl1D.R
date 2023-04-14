@@ -69,6 +69,12 @@ obj1 <- LMMsolve(fixed = yield ~ rep + gen,
 devJABES2020paper_LV <- 54.49
 expect_equal(round(deviance(obj1), 2) , devJABES2020paper_LV)
 
+## From R 4.3 there is an extra item in the family output.
+## This gives problems with the comparison.
+## Therefore it is removed first.
+
+obj1$family$dispersion <- NULL
+
 ## Check that full LMM solve object is correct.
 expect_equivalent_to_reference(obj1, "spl1DFull")
 
@@ -76,4 +82,22 @@ expect_equivalent_to_reference(obj1, "spl1DFull")
 expect_silent(LMMsolve(fixed = yield ~ rep + gen,
                        spline = ~LMMsolver::spl1D(x = plot, nseg = N - 1),
                        data = john.alpha))
+
+## Test combination of splines with conditional factor.
+obj2 <- LMMsolve(fixed = yield ~ rep + gen,
+                 spline= ~spl1D(row, nseg = 25, cond = rep, level = "R1") +
+                   spl1D(row, nseg = 20, cond = rep, level = "R2") +
+                   spl1D(row, nseg = 15, cond = rep, level = "R3"),
+                 data = john.alpha)
+
+sumObj2 <- summary(obj2)
+expect_equal(nrow(sumObj2), 10)
+expect_equal(sumObj2[["Term"]],
+             c("(Intercept)", "rep", "gen", "lin(row)_R1", "lin(row)_R2",
+               "lin(row)_R3", "s(row)_R1", "s(row)_R2", "s(row)_R3", "residual"))
+expect_equal(sumObj2[["Ratio"]],
+             c(1, 1, 1, 1, 1, 1, 0.325761468207249, 0.0865062712483912,
+               0.0593138565407634, 0.738710428505654))
+
+
 

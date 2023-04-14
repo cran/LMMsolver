@@ -36,6 +36,10 @@
 #' @param data A data.frame containing the modeling data.
 #' @param residual A formula for the residual part of the model. Should be of
 #' the form "~ pred".
+#' @param family An object of class family specifying the distribution
+#' and link function.
+#' @param offset An optional numerical vector containing an a priori
+#' known component to be included in the linear predictor during fitting.
 #' @param tolerance A numerical value. The convergence tolerance for the
 #' modified Henderson algorithm to estimate the variance components.
 #' @param trace Should the progress of the algorithm be printed? Default
@@ -93,7 +97,7 @@
 #' \code{\link{spl2D}}, \code{\link{spl3D}}
 #'
 #' @importFrom stats model.frame terms model.matrix contrasts as.formula
-#' terms.formula aggregate model.response var formula
+#' terms.formula aggregate model.response var formula gaussian
 #'
 #' @export
 LMMsolve <- function(fixed,
@@ -104,6 +108,8 @@ LMMsolve <- function(fixed,
                      weights = NULL,
                      data,
                      residual = NULL,
+                     family = gaussian(),
+                     offset = 0,
                      tolerance = 1.0e-6,
                      trace = FALSE,
                      maxit = 250,
@@ -147,11 +153,11 @@ LMMsolve <- function(fixed,
       stop("weights not defined in dataframe data")
     }
     w <- data[[weights]]
-    if (!is.numeric(w) || sum(is.na(w)) != 0 || min(w) <= 0) {
-      stop("weights should be a numeric vector with positive values")
+    if (!is.numeric(w) || sum(is.na(w)) != 0 || min(w) < 0) {
+      stop("weights should be a numeric vector with non-negative values")
     }
   } else {
-    w <- rep(1.0, nrow(data))
+    w <- rep(1, nrow(data))
   }
   if (!is.null(residual) &&
       (!inherits(residual, "formula") || length(terms(residual)) != 2)) {
@@ -163,25 +169,40 @@ LMMsolve <- function(fixed,
   if (!is.numeric(maxit) || length(maxit) > 1 || maxit < 0) {
     stop("maxit should be a positive numerical value.")
   }
-  ## Drop unused factor levels from data.
-  data <- droplevels(data)
-  ## Check that all variables used in formulas are in data.
-  chkGroup <- checkGroup(random, group)
-  random <- chkGroup$random
-  group <- chkGroup$group
-  data <- checkFormVars(fixed, data)
-  data <- checkFormVars(random, data)
-  data <- checkFormVars(residual, data)
+  ## Check that all variables used in fixed formula are in data.
+  data <- checkFormVars(fixed, data, naAllowed = FALSE)
   ## Remove NA for response variable from data.
   respVar <- all.vars(fixed)[attr(terms(fixed), "response")]
   respVarNA <- is.na(data[[respVar]])
   if (sum(respVarNA) > 0) {
     warning(sum(respVarNA), " observations removed with missing value for ",
             respVar, ".\n", call. = FALSE)
-    data <- droplevels(data[!respVarNA, ])
+    data <- data[!respVarNA, ]
     ## remove missing values for weight (default w=1).
     w <- w[!respVarNA]
   }
+  ## Remove observations with zero weights
+  weightsZero <- w == 0
+  if (sum(weightsZero) > 0) {
+    # warning(sum(weightsZero), " observations removed with zero weights \n ",
+    #        call. = FALSE)
+    data <- data[!weightsZero, ]
+    ## remove missing values for weight (default w=1).
+    w <- w[!weightsZero]
+  }
+  ## Drop unused factor levels from data.
+  data <- droplevels(data)
+  ## Check random term for conditional factor
+  condFactor <- condFactor(random, data)
+  if (!is.null(condFactor)) {
+    random <- condFactor$random
+  }
+  ## Check that all variables used in formulas are in data.
+  chkGroup <- checkGroup(random, group, data)
+  random <- chkGroup$random
+  group <- chkGroup$group
+  data <- checkFormVars(random, data)
+  data <- checkFormVars(residual, data)
   ## Make random part.
   if (!is.null(random)) {
     mf <- model.frame(random, data, drop.unused.levels = TRUE, na.action = NULL)
@@ -197,7 +218,7 @@ LMMsolve <- function(fixed,
     ## Number of variance parameters (see Gilmour 1995) for each variance component
     varPar1 <- rep(1, length(dim1.r))
     if (ncol(Z1) > 1) {
-      Z1 <- Z1[, -1]
+      Z1 <- Z1[, -1, drop = FALSE]
       Z1 <- spam::as.spam.dgCMatrix(Z1)
     }
     else {
@@ -224,12 +245,25 @@ LMMsolve <- function(fixed,
     Z2 <- NULL
     varPar2 <- NULL
   }
-  if (!(is.null(random) & is.null(group))) {
-    Z <- spam::cbind.spam(Z1, Z2)
-    dim.r <- c(dim1.r, dim2.r)
-    term.labels.r <- c(term1.labels.r, term2.labels.r)
-    scFactor <- c(scFactor1, scFactor2)
-    varPar <- c(varPar1, varPar2)
+  if (!is.null(condFactor)) {
+    dim3.r <- condFactor$dim.r
+    term3.labels.r <- condFactor$term.labels.r
+    scFactor3 <- rep(1, length(dim3.r))
+    varPar3 <- rep(1, length(dim3.r))
+    Z3 <- condFactor$Z
+  } else {
+    dim3.r <- NULL
+    term3.labels.r <- NULL
+    scFactor3 <- NULL
+    Z3 <- NULL
+    varPar3 <- NULL
+  }
+  if (!(is.null(random) && is.null(group) && is.null(condFactor))) {
+    Z <- spam::cbind.spam(Z1, Z2, Z3)
+    dim.r <- c(dim1.r, dim2.r, dim3.r)
+    term.labels.r <- c(term1.labels.r, term2.labels.r, term3.labels.r)
+    scFactor <- c(scFactor1, scFactor2, scFactor3)
+    varPar <- c(varPar1, varPar2, varPar3)
     e <- cumsum(dim.r)
     s <- e - dim.r + 1
     lGinv <- list()
@@ -276,19 +310,28 @@ LMMsolve <- function(fixed,
   X <- model.matrix(mt, data = mf,
                     contrasts.arg = lapply(X = mf[, f.terms, drop = FALSE],
                                            FUN = contrasts, contrasts = TRUE))
+  term.labels.f <- attr(mt, "term.labels")
+
   q <- qr(X)
   remCols <- q$pivot[-seq(q$rank)]
   if (length(remCols) > 0) {
-    dim.f <- as.numeric(table(attr(X, "assign")[-remCols]))
+    ## Compare terms before and after removing extra columns.
+    ## If a complete term is removed, it also has to be removed from the labels.
+    f.terms.orig <- as.numeric(names(table(attr(X, "assign"))))
+
+    dim.f.tab <- table(attr(X, "assign")[-remCols])
+    dim.f <- as.numeric(dim.f.tab)
     X <- X[ , -remCols, drop = FALSE]
+    f.terms.new <- as.numeric(names(dim.f.tab))
+    if (!setequal(f.terms.orig, f.terms.new)) {
+      term.labels.f <- term.labels.f[-setdiff(f.terms.orig, f.terms.new)]
+    }
   } else {
     dim.f <- as.numeric(table(attr(X, "assign")))
   }
-  term.labels.f <- attr(mt, "term.labels")
-
   ## calculate NomEff dimension for non-spline part
   Xs <- spam::as.spam(X)
-  NomEffDimRan <- calcNomEffDim(Xs, Z, dim.r)
+  NomEffDimRan <- calcNomEffDim(Xs, Z, dim.r, term.labels.r)
   ## Add spline part.
   splResList <- NULL
   if (!is.null(spline)) {
@@ -347,36 +390,68 @@ LMMsolve <- function(fixed,
            levelsNoVar, "\n")
     }
   }
-  ## Make X sparse
+  ## Make X sparse.
   Xs <- spam::as.spam(X)
-  ## Fit the model
-
-  if (!is.null(theta))
-  {
+  ## Fit the model.
+  if (!is.null(theta)) {
     if (length(theta) != length(scFactor)) {
       stop("Argument theta has wrong length \n")
     }
-    theta <- theta/scFactor
+    theta <- theta / scFactor
   } else {
-    theta <- 1/scFactor
+    theta <- 1 / scFactor
   }
-  obj <- sparseMixedModels(y = y, X = Xs, Z = Z, lGinv = lGinv, lRinv = lRinv,
-                           tolerance = tolerance, trace = trace, maxit = maxit,
-                           theta = theta)
-  ## Add names to coefficients.
+  if (family$family == "gaussian") {
+    obj <- sparseMixedModels(y = y, X = Xs, Z = Z, lGinv = lGinv, lRinv = lRinv,
+                             tolerance = tolerance, trace = trace, maxit = maxit,
+                             theta = theta)
+  } else {
+    ## MB, 23 jan 2023
+    ## binomial needs global weights
+    weights <- w
+    nobs <- length(y)
+    mustart <- etastart <- NULL
+    eval(family$initialize)
+    mu <- mustart
+    eta <- family$linkfun(mustart)
+    nNonRes <- length(theta) - nRes
+    fixedTheta <- c(rep(FALSE, nNonRes), rep(TRUE, nRes))
+    theta[(nNonRes + 1):(nNonRes + nRes)] <- 1
+    for (i in 1:maxit) {
+      deriv <- family$mu.eta(eta)
+      z <- (eta - offset) + (y - mu)/deriv
+      wGLM <- as.vector(deriv^2 / family$variance(mu))
+      wGLM <- wGLM*w
+      lRinv <- constructRinv(df = data, residual = residual, weights = wGLM)
+      obj <- sparseMixedModels(y = z, X = Xs, Z = Z, lGinv = lGinv, lRinv = lRinv,
+                               tolerance = tolerance, trace = trace, maxit = maxit,
+                               theta = theta, fixedTheta = fixedTheta)
+      eta.old <- eta
+      eta <- obj$yhat + offset
+      mu <- family$linkinv(eta)
+      theta <- obj$theta
+      tol <- sum((eta - eta.old)^2) / sum(eta^2)
+      if (trace) {
+        cat("Generalized Linear Mixed Model iteration", i, ", tol=", tol, "\n")
+      }
+      if (tol < tolerance) break;
+    }
+  }
+  ## Add names to ndx of coefficients.
+  ndxCf <- seq_along(obj$a)
   ## Fixed terms.
   ef <- cumsum(dim.f)
   sf <- ef - dim.f + 1
-  coefF <- nameCoefs(coefs = obj$a, desMat = X, termLabels = term.labels.f,
+  ndxCoefF <- nameCoefs(coefs = ndxCf, desMat = X, termLabels = term.labels.f,
                      s = sf, e = ef, data = data, type = "fixed")
   ## Random terms.
   er <- sum(dim.f) + cumsum(dim.r)
   sr <- er - dim.r + 1
-  coefR <- nameCoefs(coefs = obj$a, termLabels = term.labels.r, s = sr, e = er,
+  ndxCoefR <- nameCoefs(coefs = ndxCf, termLabels = term.labels.r, s = sr, e = er,
                      data = data, group = group, type = "random")
   ## Combine result for fixed and random terms.
-  coefTot <- c(coefF, coefR)
-  names(coefTot) <- c(term.labels.f, term.labels.r)
+  ndxCoefTot <- c(ndxCoefF, ndxCoefR)
+  names(ndxCoefTot) <- c(term.labels.f, term.labels.r)
   ## Extract effective dimensions from fitted model.
   EffDimRes <- attributes(lRinv)$cnt
   EffDimNamesRes <- attributes(lRinv)$names
@@ -420,10 +495,16 @@ LMMsolve <- function(fixed,
                         varPar = varPar,
                         VarDf = VarDf,
                         theta = obj$theta,
-                        coefficients = coefTot,
+                        coefMME = obj$a,
+                        ndxCoefficients = ndxCoefTot,
                         yhat = obj$yhat,
                         residuals = obj$residuals,
                         nIter = obj$nIter,
+                        y = y,
+                        X = Xs,  # sparse format
+                        Z = Z,
+                        lGinv = lGinv,
+                        lRinv = lRinv,
                         C = obj$C,
                         cholC = obj$cholC,
                         constantREML = constantREML,
@@ -431,5 +512,6 @@ LMMsolve <- function(fixed,
                         Nres = length(lRinv),
                         term.labels.f = term.labels.f,
                         term.labels.r = term.labels.r,
-                        splRes = splResList))
+                        splRes = splResList,
+                        family = family))
 }

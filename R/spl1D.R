@@ -10,7 +10,10 @@
 #' @param degree The degree of B-spline basis, default \code{degree = 3}
 #' @param xlim,x1lim,x2lim,x3lim A numerical vector of length 2 containing the
 #' domain of the corresponding x covariate where the knots should be placed.
-#' Default set to \code{NULL} (covariate range).
+#' Default set to \code{NULL}, when the covariate range will be used.
+#' @param cond Conditional factor: splines are defined conditional on the level.
+#' Default \code{NULL}.
+#' @param level The level of the conditional factor. Default \code{NULL}.
 #'
 #' @return A list with the following elements:
 #' \itemize{
@@ -64,7 +67,9 @@ spl1D <- function(x,
                   pord = 2,
                   degree = 3,
                   scaleX = TRUE,
-                  xlim = range(x)) {
+                  xlim = NULL,
+                  cond = NULL,
+                  level = NULL) {
   ## Checks.
   if (!is.numeric(pord) || length(pord) > 1 || !pord %in% 1:2) {
     stop("pord should be either 1 or 2.\n")
@@ -84,6 +89,14 @@ spl1D <- function(x,
          "are not in the data:\n", xName, "\n",
          call. = FALSE)
   }
+  ## check (syntax) conditional factor.
+  conditional <- checkConditionalFactor(x, cond, level)
+  if (conditional) {
+    Nelem <- length(x)
+    ndx <- cond == level
+    x <- x[ndx]
+  }
+  if (is.null(xlim)) { xlim <- range(x) }
   if (!is.numeric(xlim) || length(xlim) != 2 ||
       xlim[1] > range(x)[1] || xlim[2] < range(x)[2]) {
     stop("xlim should be a vector of length two with all values of ", xName,
@@ -93,9 +106,14 @@ spl1D <- function(x,
   knots[[1]] <- PsplinesKnots(xlim[1], xlim[2], degree = degree, nseg = nseg)
   B <- Bsplines(knots[[1]], x)
   q <- ncol(B)
-  X <- constructX(B, x, scaleX, pord)
+  if (conditional) {
+    sel <- which(ndx)
+    B <- extSpamMatrix(B, sel, length(ndx))
+  }
+  G <- constructG(knots[[1]], scaleX, pord)
+  X <- B %*% G
   ## nominal effective dimension.
-  EDnom = ncol(B) - ncol(X)
+  EDnom <- ncol(B) - ncol(X)
   ## Remove intercept column to avoid singularity problems.
   X <- removeIntercept(X)
   ## Construct list of sparse precision matrices.
@@ -111,13 +129,18 @@ spl1D <- function(x,
   }
   dim.r <- ncol(B)
   term.labels.r <- paste0("s(", xName, ")")
+  if (conditional) {
+    if (!is.null(term.labels.f)) {
+      term.labels.f <- paste0(term.labels.f, "_", level)
+    }
+    term.labels.r <- paste0(term.labels.r, "_", level)
+    names(lGinv) <- paste0("s(", xName, ")_", level)
+  }
   xList <- setNames(list(x), xName)
   return(list(X = X, Z = B, lGinv = lGinv, knots = knots,
               dim.f = dim.f, dim.r = dim.r, term.labels.f = term.labels.f,
               term.labels.r = term.labels.r, x = xList, pord = pord,
-              degree = degree, scaleX = scaleX, EDnom = EDnom, scaleFactor=scaleFactor))
+              degree = degree, scaleX = scaleX, EDnom = EDnom,
+              scaleFactor = scaleFactor))
 }
-
-
-
 

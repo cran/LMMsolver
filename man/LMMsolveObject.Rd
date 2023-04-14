@@ -12,10 +12,16 @@ An object of class \code{LMMsolve} contains the following components:
 \item{varPar}{The number of variance parameters for each variance component}
 \item{VarDf}{The table with variance components}
 \item{theta}{The precision parameters}
-\item{coefficients}{The estimated effects from the mixed model equations}
+\item{coefMME}{A vector with all the estimated effects from mixed model equations}
+\item{ndxCoefficients}{The indices of the coefficients with the names}
 \item{yhat}{The fitted values}
 \item{residuals}{The residuals}
 \item{nIter}{The number of iterations for the mixed model to converge}
+\item{y}{Response variable}
+\item{X}{The design matrix for the fixed part of the mixed model}
+\item{Z}{The design matrix for the random part of the mixed model}
+\item{lGinv}{List with precision matrices for the random terms}
+\item{lRinv}{List with precision matrices for the residual}
 \item{C}{The mixed model coefficient matrix after last iteration}
 \item{cholC}{The cholesky decomposition of coefficient matrix C}
 \item{constantREML}{The REML constant}
@@ -24,6 +30,7 @@ mixed model}
 \item{term.labels.f}{The names of the fixed terms in the mixed model}
 \item{term.labels.r}{The names of the random terms in the mixed model}
 \item{splRes}{An object with definition of spline argument}
+\item{family}{An object of class family specifying the distribution and link function}.
 }
 \description{
 An object of class \code{LMMsolve} returned by the LMMsolve function,

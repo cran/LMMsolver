@@ -1,3 +1,104 @@
+#' Construct Design matrix for predictions splines.
+#'
+#' @noRd
+#' @keywords internal
+designMatrixPredSplines <- function(object,
+                                    grid = NULL,
+                                    newdata = NULL,
+                                    deriv = 0,
+                                    includeIntercept = FALSE,
+                                    which = 1) {
+  ## Get dimension of fitted spline component.
+  splRes <- object$splRes[[which]]
+  splF_name <- splRes$term.labels.f
+  splR_name <- splRes$term.labels.r
+  ## Get content from splRes.
+  x <- splRes$x
+  knots <- splRes$knots
+  scaleX <- splRes$scaleX
+  pord <- splRes$pord
+  degree <- splRes$degree
+  splDim <- length(x)
+  if (splDim == 1 && (!is.numeric(deriv) || length(deriv) > 1 || deriv < 0 ||
+                      deriv != round(deriv))) {
+    stop("deriv should be an integer greater than or equal to zero.\n")
+  }
+  if (splDim > 1 && deriv != 0) {
+    deriv <- 0
+    warning("deriv is ignored for ", splDim, "-dimensional splines.\n",
+            call. = FALSE)
+  }
+  if (deriv > degree) {
+    stop(deriv,
+         "-order derivatives cannot be computed for B-splines of degree ",
+         degree)
+  }
+  if (!is.null(newdata)) {
+    if (!inherits(newdata, "data.frame")) {
+      stop("newdata should be a data.frame.\n")
+    }
+    missX <- names(x)[!sapply(X = names(x), FUN = function(name) {
+      hasName(x = newdata, name = name)
+    })]
+    if (length(missX) > 0) {
+      stop("The following smoothing variables are not in newdata:\n",
+           paste0(missX, collapse = ", "), "\n")
+    }
+    ## Construct grid for each dimension.
+    xGrid <- lapply(X = seq_along(x), FUN = function(i) {
+      newdata[[names(x)[i]]]
+    })
+    ## Compute Bx per dimension.
+    Bx <- mapply(FUN = Bsplines, knots, xGrid, deriv)
+    ## Compute Bx over all dimensions.
+    BxTot <- Reduce(RowKronecker, Bx)
+  } else {
+    if (!is.numeric(grid) || length(grid) != splDim) {
+      stop("grid should be a numeric vector with length equal to the dimension ",
+           "of the fitted spline: ", splDim,".\n")
+    }
+    ## Construct grid for each dimension.
+    xGrid <- lapply(X = seq_len(splDim), FUN = function(i) {
+      seq(attr(knots[[i]], which = 'xmin'), attr(knots[[i]], which = 'xmax'),
+          length = grid[i])
+    })
+    ## Compute Bx per dimension.
+    Bx <- mapply(FUN = Bsplines, knots, xGrid, deriv)
+    ## Compute Bx over all dimensions.
+    BxTot <- Reduce(`%x%`, Bx)
+  }
+  ## Compute G per dimension.
+  G <- lapply(X=knots, FUN = function(x) {
+    constructG(knots = x, scaleX = scaleX, pord = pord)})
+  ## Compute G over all dimensions
+  GTot <- Reduce('%x%', G)
+  ## no scaling for first column of GTot
+  GTot[,1] <- 1
+  XTot <- BxTot %*% GTot
+  ## Remove intercept (needed when fitting model to avoid singularities).
+  XTot <- removeIntercept(XTot)
+
+  labels <- c(object$term.labels.f, object$term.labels.r)
+  lU <- list()
+  dim <- object$dim
+  for (i in seq_along(dim)) {
+    lU[[i]] = spam::spam(x = 0, nrow = nrow(BxTot), ncol = dim[i])
+  }
+  if (includeIntercept) {
+    lU[[1]] = spam::spam(x = 1, nrow = nrow(BxTot), ncol = 1)
+  }
+  if (!is.null(splRes$term.labels.f)) {
+    ndx.f <- which(splRes$term.labels.f == labels)
+    lU[[ndx.f]] <- XTot
+  }
+  ndx.r <- which(splRes$term.labels.r == labels)
+  lU[[ndx.r]] <- BxTot
+
+  U <- Reduce(spam::cbind.spam, lU)
+  attr(U, "xGrid") <- xGrid
+  return(U)
+}
+
 #' Obtain Smooth Trend.
 #'
 #' Obtain the smooth trend for models fitted with a spline component.
@@ -64,143 +165,29 @@ obtainSmoothTrend <- function(object,
     stop("which should be an integer with value at most the number of fitted",
          "spline components.\n")
   }
-  ## Get dimension of fitted spline component.
   splRes <- object$splRes[[which]]
-  splF_name <- splRes$term.labels.f
-  splR_name <- splRes$term.labels.r
-  ## Get content from splRes.
   x <- splRes$x
-  knots <- splRes$knots
-  scaleX <- splRes$scaleX
-  pord <- splRes$pord
-  degree <- splRes$degree
-  splDim <- length(x)
-  if (splDim == 1 && (!is.numeric(deriv) || length(deriv) > 1 || deriv < 0 ||
-      deriv != round(deriv))) {
-    stop("deriv should be an integer greater than or equal to zero.\n")
-  }
-  if (splDim > 1 && deriv != 0) {
-    deriv <- 0
-    warning("deriv is ignored for ", splDim, "-dimensional splines.\n",
-            call. = FALSE)
-  }
-  if (deriv > degree) {
-    stop(deriv,
-         "-order derivatives cannot be computed for B-splines of degree ",
-         degree)
-  }
-  if (deriv > 0) {
-    includeIntercept <- FALSE
-  }
-  if (!is.null(newdata)) {
-    if (!inherits(newdata, "data.frame")) {
-      stop("newdata should be a data.frame.\n")
-    }
-    missX <- names(x)[!sapply(X = names(x), FUN = function(name) {
-      hasName(x = newdata, name = name)
-    })]
-    if (length(missX) > 0) {
-      stop("The following smoothing variables are not in newdata:\n",
-           paste0(missX, collapse = ", "), "\n")
-    }
-    ## Construct grid for each dimension.
-    xGrid <- lapply(X = seq_along(x), FUN = function(i) {
-      newdata[[names(x)[i]]]
-    })
-    ## Compute Bx per dimension.
-    Bx <- mapply(FUN = Bsplines, knots, xGrid, deriv)
-    ## Compute Bx over all dimensions.
-    BxTot <- Reduce(RowKronecker, Bx)
-  } else {
-    if (!is.numeric(grid) || length(grid) != splDim) {
-      stop("grid should be a numeric vector with length equal to the dimension ",
-           "of the fitted spline: ", splDim,".\n")
-    }
-    ## Construct grid for each dimension.
-    xGrid <- lapply(X = seq_len(splDim), FUN = function(i) {
-      seq(attr(knots[[i]], which='xmin'), attr(knots[[i]], which='xmax'), length = grid[i])
-    })
-    ## Compute Bx per dimension.
-    Bx <- mapply(FUN = Bsplines, knots, xGrid, deriv)
-    ## Compute Bx over all dimensions.
-    BxTot <- Reduce(`%x%`, Bx)
-  }
-  ## Compute X per dimension.
-  X <- mapply(FUN = function(x, y) {
-    constructX(B = x, x = y, scaleX = scaleX, pord = pord)
-  }, Bx, xGrid, SIMPLIFY = FALSE)
-  ## Compute X over all dimensions.
-  if (!is.null(newdata)) {
-    XTot <- Reduce(RowKronecker, X)
-  } else {
-    XTot <- Reduce(`%x%`, X)
-  }
-  ## Remove intercept (needed when fitting model to avoid singularities).
-  XTot <- removeIntercept(XTot)
-  ## Get intercept and compute contribution of fixed and random terms.
-  if (includeIntercept) {
-    mu <- coef(object)$'(Intercept)'
-  } else {
-    mu <- 0
-  }
-  if (is.null(XTot)) {
-    coefFix <- 0
-  } else {
-    if (deriv == 0) {
-      coefFix <- as.vector(XTot %*% coef(object)[[splF_name]])
-    } else {
-      ## only for spl1D, deriv option ignored for splDim > 1
-      if (deriv == 1 & pord==2) {
-        ## calculate scaling factor alpha
-        if (scaleX) {
-          range_org <- c(attr(knots[[1]],"xmin"), attr(knots[[1]], "xmax"))
-          Bx0 <- Bsplines(knots[[1]], range_org, deriv=0)
-          U_null <- scale(seq_len(ncol(Bx0)))
-          U_null <- U_null/normVec(U_null)
-          range_sc <- Bx0 %*% U_null
-          scaleFactor <- (range_sc[2]-range_sc[1])/(range_org[2]-range_org[1])
-        } else {
-          scaleFactor <- 1.0
-        }
-        coefFix <- coef(object)[[splF_name]]*scaleFactor
-      } else {
-        ## second derivative equal to zero
-        coefFix <- 0
-      }
-    }
-  }
-  coefRan <- as.vector(BxTot %*% coef(object)[[splR_name]])
-  ## Compute fitted values.
-  fit <- mu + coefFix + coefRan
+  ## make the design matrix needed for predictions and corresponding
+  ## standard errors.
+  U <- designMatrixPredSplines(object, grid, newdata, deriv,
+                               includeIntercept, which)
+  xGrid <- attr(U,which="xGrid")
+  ## calculate the predictions
+  pred <- as.vector(U %*% object$coefMME)
+  family <- object$family
+  familyPred <- family$linkinv(pred)
   ## Construct output data.frame.
   if (!is.null(newdata)) {
     outDat <- newdata
-    outDat[["ypred"]] <- fit
+    outDat[["ypred"]] <- familyPred
   } else {
-    outDat <- data.frame(expand.grid(rev(xGrid)), ypred = fit)
+    outDat <- data.frame(expand.grid(rev(xGrid)), ypred = familyPred)
     colnames(outDat)[-ncol(outDat)] <- rev(names(x))
     outDat <- outDat[c(names(x), "ypred")]
   }
-  ## only add standard errors if deriv == 0 and includeIntercept
-  if (deriv == 0 & includeIntercept) {
-    labels <- c(object$term.labels.f, object$term.labels.r)
-    lU <- list()
-    dim <- object$dim
-    for (i in seq_along(dim)) {
-      lU[[i]] = spam::spam(x = 0, nrow = nrow(BxTot), ncol = dim[i])
-    }
-    if (includeIntercept) {
-      lU[[1]] = spam::spam(x = 1, nrow = nrow(BxTot), ncol = 1)
-    }
-    if (!is.null(splRes$term.labels.f)) {
-      ndx.f <- which(splRes$term.labels.f == labels)
-      lU[[ndx.f]] <- XTot
-    }
-    ndx.r <- which(splRes$term.labels.r == labels)
-    lU[[ndx.r]] <- BxTot
-
-    U <- Reduce(spam::cbind.spam, lU)
-    outDat[["se"]] <- calcStandardErrors(object$C, U)
+  ## only add standard errors if:
+  if (deriv == 0 && includeIntercept && family$family == "gaussian") {
+    outDat[["se"]] <- calcStandardErrors(C = object$C, D = U)
   }
   return(outDat)
 }

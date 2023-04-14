@@ -4,10 +4,12 @@
 \alias{coef.LMMsolve}
 \title{Coefficients from the mixed model equations of an LMMsolve object.}
 \usage{
-\method{coef}{LMMsolve}(object, ...)
+\method{coef}{LMMsolve}(object, se = FALSE, ...)
 }
 \arguments{
 \item{object}{an object of class LMMsolve}
+
+\item{se}{calculate standard errors, default FALSE.}
 
 \item{\dots}{some methods for this generic require additional arguments.
 None are used in this method.}
@@ -30,5 +32,8 @@ LMM1 <- LMMsolve(fixed = yield ~ rep + gen,
 
 ## Obtain coefficients.
 coefs1 <- coef(LMM1)
+
+## Obtain coefficients with standard errors.
+coefs2 <- coef(LMM1, se = TRUE)
 
 }

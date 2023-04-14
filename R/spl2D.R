@@ -7,8 +7,10 @@ spl2D <- function(x1,
                   pord = 2,
                   degree = 3,
                   scaleX = TRUE,
-                  x1lim = range(x1),
-                  x2lim = range(x2)) {
+                  x1lim = NULL,
+                  x2lim = NULL,
+                  cond = NULL,
+                  level = NULL) {
   ## Checks.
   if (!is.numeric(pord) || length(pord) > 1 || !pord %in% 1:2) {
     stop("pord should be either 1 or 2.\n")
@@ -32,6 +34,16 @@ spl2D <- function(x1,
          "are not in the data:\n", paste0(missVars, collapse = ", "), "\n",
          call. = FALSE)
   }
+  ## check (syntax) conditional factor
+  conditional <- checkConditionalFactor(x1, cond, level)
+  if (conditional) {
+    Nelem <- length(x1)
+    ndx <- cond == level
+    x1 <- x1[ndx]
+    x2 <- x2[ndx]
+  }
+  if (is.null(x1lim)) { x1lim <- range(x1) }
+  if (is.null(x2lim)) { x2lim <- range(x2) }
   if (!is.numeric(x1lim) || length(x1lim) != 2 ||
       x1lim[1] > range(x1)[1] || x1lim[2] < range(x1)[2]) {
     stop("x1lim should be a vector of length two with all values of ", x1Name,
@@ -49,9 +61,14 @@ spl2D <- function(x1,
   B2 <- Bsplines(knots[[2]], x2)
   q <- c(ncol(B1), ncol(B2))
   B12 <- RowKronecker(B1, B2)
-  X1 <- constructX(B1, x1, scaleX, pord)
-  X2 <- constructX(B2, x2, scaleX, pord)
-  X <- RowKronecker(X1, X2)
+  if (conditional) {
+    sel <- which(ndx)
+    B12 <- extSpamMatrix(B12, sel, length(ndx))
+  }
+  G1 <- constructG(knots[[1]], scaleX, pord)
+  G2 <- constructG(knots[[2]], scaleX, pord)
+  G <- G1 %x% G2
+  X <- B12 %*% G
   ## nominal effective dimension.
   EDnom = rep(ncol(B12) - ncol(X), 2)
   ## Remove intercept column to avoid singularity problems.
@@ -69,11 +86,19 @@ spl2D <- function(x1,
   }
   dim.r <- ncol(B12)
   term.labels.r <-  paste0("s(", paste(xNames, collapse = ", "), ")")
+  if (conditional) {
+    if (!is.null(term.labels.f)) {
+      term.labels.f <- paste0(term.labels.f, "_", level)
+    }
+    term.labels.r <- paste0(term.labels.r, "_", level)
+    names(lGinv) <- paste0("s(", xNames, ")_", level)
+  }
   xList <- setNames(list(x1, x2), xNames)
   return(list(X = X, Z = B12, lGinv = lGinv, knots = knots,
               dim.f = dim.f, dim.r = dim.r, term.labels.f = term.labels.f,
               term.labels.r = term.labels.r, x = xList, pord = pord,
-              degree = degree, scaleX = scaleX, EDnom = EDnom, scaleFactor=scaleFactor))
+              degree = degree, scaleX = scaleX, EDnom = EDnom,
+              scaleFactor = scaleFactor))
 
 }
 

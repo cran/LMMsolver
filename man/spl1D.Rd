@@ -6,7 +6,16 @@
 \alias{spl3D}
 \title{Fit P-splines}
 \usage{
-spl1D(x, nseg, pord = 2, degree = 3, scaleX = TRUE, xlim = range(x))
+spl1D(
+  x,
+  nseg,
+  pord = 2,
+  degree = 3,
+  scaleX = TRUE,
+  xlim = NULL,
+  cond = NULL,
+  level = NULL
+)
 
 spl2D(
   x1,
@@ -15,8 +24,10 @@ spl2D(
   pord = 2,
   degree = 3,
   scaleX = TRUE,
-  x1lim = range(x1),
-  x2lim = range(x2)
+  x1lim = NULL,
+  x2lim = NULL,
+  cond = NULL,
+  level = NULL
 )
 
 spl3D(
@@ -46,7 +57,12 @@ the \code{x} covariates.}
 
 \item{xlim, x1lim, x2lim, x3lim}{A numerical vector of length 2 containing the
 domain of the corresponding x covariate where the knots should be placed.
-Default set to \code{NULL} (covariate range).}
+Default set to \code{NULL}, when the covariate range will be used.}
+
+\item{cond}{Conditional factor: splines are defined conditional on the level.
+Default \code{NULL}.}
+
+\item{level}{The level of the conditional factor. Default \code{NULL}.}
 }
 \value{
 A list with the following elements:
