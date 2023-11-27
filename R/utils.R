@@ -216,7 +216,7 @@ calcNomEffDim <- function(X,
   # for each variance component in Z:
   for (i in 1:length(dim.r)) {
     ndx <- s[i]:e[i]
-    Zi <- Z[, ndx]
+    Zi <- Z[, ndx, drop = FALSE]
     # if number of columns is high, use upper bound:
     if (dim.r[i] > 100 | nrow(X) > 10000) {
       rowSum <- spam::rowSums.spam(Zi)
@@ -227,11 +227,10 @@ calcNomEffDim <- function(X,
       }
     } else {
       XZ <- cbind(X, Zi)
-      r <- qr(XZ)$rank
-      if (r==p) {
-        msg <- paste("Singularity problem with term", term.labels.r[i],
-                     "in the random part of the model")
-        stop(msg)
+      r <- qr(as.matrix(XZ))$rank
+      if (r == p) {
+        stop("Singularity problem with term", term.labels.r[i],
+             "in the random part of the model")
       }
       EDnom[i] <- r - p
     }
@@ -331,21 +330,27 @@ checkGroup <- function(random,
     } else {
       ## Extract variables specified in grp() functions in random part.
       randTerms <- terms(random, specials = "grp")
+      ## The next line seems redundant, but for some reason it reorders
+      ## the terms/attributes in such a way that the order matches.
+      ## The following code is based on a matching order.
+      randTerms <- randTerms[seq_along(labels(randTerms))]
       grpPos <- attr(randTerms, which = "specials")$grp
       grpTerms <- sapply(X = grpPos, FUN = function(pos) {randTerms[pos]})
       grpVars <- sapply(X = grpTerms, FUN = all.vars)
       ## Check for variables in grp missing in group.
-      if (is.null(group)) {
-        grpMiss <- grpVars
-      } else {
-        grpMiss <- grpVars[sapply(X = grpVars, FUN = function(grpVar) {
-          !hasName(x = group, name = grpVar)
-        })]
-      }
-      if (length(grpMiss) > 0) {
-        stop("The following variables are specified in grp in the random part ",
-             "of the model but not present in group:\n",
-             paste0(grpMiss, collapse = ", "), "\n", call. = FALSE)
+      if (length(grpVars) > 0) {
+        if (is.null(group)) {
+          grpMiss <- grpVars
+        } else {
+          grpMiss <- grpVars[sapply(X = grpVars, FUN = function(grpVar) {
+            !hasName(x = group, name = grpVar)
+          })]
+        }
+        if (length(grpMiss) > 0) {
+          stop("The following variables are specified in grp in the random part ",
+               "of the model but not present in group:\n",
+               paste0(grpMiss, collapse = ", "), "\n", call. = FALSE)
+        }
       }
       ## Remove grp terms from random part of the model.
       if (length(grpPos) > 0) {

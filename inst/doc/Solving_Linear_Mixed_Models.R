@@ -1,4 +1,4 @@
-## ---- include = FALSE---------------------------------------------------------
+## ----include = FALSE----------------------------------------------------------
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
@@ -42,7 +42,7 @@ head(plotDat1)
 ## ----plot1D-------------------------------------------------------------------
 ## Plot smooth trend.
 ggplot(data = plotDat1, aes(x = plot, y = ypred)) +
-  geom_line(color = "red", size = 1) +
+  geom_line(color = "red", linewidth = 1) +
   labs(title = "Smooth spatial trend oats data", x = "plotnr", y = "yield") +
   theme(panel.grid = element_blank())
 
@@ -85,9 +85,9 @@ plotDat2 <- obtainSmoothTrend(obj2, grid = 1000, includeIntercept = TRUE)
 
 ggplot(data = APSIMdat, aes(x = das, y = biomass)) +
   geom_point(size = 1.2) +
-  geom_line(data = plotDat2, aes(y = ypred), color = "red", size = 1) +
-  geom_line(data = plotDat2, aes(y = ypred-2*se), col='blue', size=1) +
-  geom_line(data = plotDat2, aes(y = ypred+2*se), col='blue', size=1) +
+  geom_line(data = plotDat2, aes(y = ypred), color = "red", linewidth = 1) +
+  geom_line(data = plotDat2, aes(y = ypred-2*se), col='blue', linewidth = 1) +
+  geom_line(data = plotDat2, aes(y = ypred+2*se), col='blue', linewidth = 1) +
   labs(title = "APSIM biomass as function of time", 
        x = "days after sowing", y = "biomass (kg)") +
   theme(panel.grid = element_blank())
@@ -96,7 +96,7 @@ ggplot(data = APSIMdat, aes(x = das, y = biomass)) +
 plotDatDt <- obtainSmoothTrend(obj2, grid = 1000, deriv = 1)
 
 ggplot(data = plotDatDt, aes(x = das, y = ypred)) +
-  geom_line(color = "red", size = 1) +
+  geom_line(color = "red", linewidth = 1) +
   labs(title = "APSIM growth rate as function of time", 
        x = "days after sowing", y = "growth rate (kg/day)") +
   theme(panel.grid = element_blank())
@@ -119,15 +119,22 @@ summary(obj3)
 
 ## ----Plot_USprecip------------------------------------------------------------
 plotDat3 <- obtainSmoothTrend(obj3, grid = c(200, 300), includeIntercept = TRUE)
-usa = maps::map("usa", regions = "main", plot = FALSE)
-v <- sp::point.in.polygon(plotDat3$lon, plotDat3$lat, usa$x, usa$y)
-plotDat3 <- plotDat3[v == 1, ]
+plotDat3 <- sf::st_as_sf(plotDat3, coords = c("lon", "lat"))
+usa <- sf::st_as_sf(maps::map("usa", regions = "main", plot = FALSE))
+sf::st_crs(usa) <- sf::st_crs(plotDat3)
+intersection <- sf::st_intersects(plotDat3, usa)
+plotDat3 <- plotDat3[!is.na(as.numeric(intersection)), ]
 
-ggplot(plotDat3, aes(x = lon, y = lat, fill = ypred)) +
-  geom_tile(show.legend = TRUE) +
+ggplot(usa) + 
+  geom_sf(color = NA) +
+  geom_tile(data = plotDat3, 
+            mapping = aes(geometry = geometry, fill = ypred), 
+            linewidth = 0,
+            stat = "sf_coordinates") +
   scale_fill_gradientn(colors = topo.colors(100))+
-  labs(title = "Precipitation (anomaly)", x = "Longitude", y = "Latitude") +
-  coord_fixed() +
+  labs(title = "Precipitation (anomaly)", 
+       x = "Longitude", y = "Latitude") +
+  coord_sf() +
   theme(panel.grid = element_blank())
 
 ## ----newdataARG---------------------------------------------------------------

@@ -12,24 +12,24 @@ downloads](https://cranlogs.r-pkg.org/badges/LMMsolver)](https://www.r-pkg.org/p
 The aim of the `LMMsolver` package is to provide an efficient and
 flexible system to estimate variance components using restricted maximum
 likelihood or REML (Patterson and Thompson 1971), for models where the
-mixed model equations are sparse. An example of an application is using
-splines to model spatial (Rodríguez-Álvarez et al. 2018; Boer, Piepho,
-and Williams 2020) or temporal (Bustos-Korts et al. 2019) trends.
-Another example is mixed model Quantitative Trait Locus (QTL) analysis
-for multiparental populations, allowing for heterogeneous residual
-variance and design matrices with Identity-By-Descent (IBD)
+mixed model equations are sparse (Boer 2023). An example of an
+application is using splines to model spatial (Rodríguez-Álvarez et al.
+2018; Boer, Piepho, and Williams 2020) or temporal (Bustos-Korts et al.
+2019) trends. Another example is mixed model Quantitative Trait Locus
+(QTL) analysis for multiparental populations, allowing for heterogeneous
+residual variance and design matrices with Identity-By-Descent (IBD)
 probabilities (Li et al. 2021).
 
 ## Installation
 
--   Install from CRAN:
+- Install from CRAN:
 
 ``` r
 install.packages("LMMsolver")
 ```
 
--   Install latest development version from GitHub (requires
-    [remotes](https://github.com/r-lib/remotes) package):
+- Install latest development version from GitHub (requires
+  [remotes](https://github.com/r-lib/remotes) package):
 
 ``` r
 remotes::install_github("Biometris/LMMsolver", ref = "develop", dependencies = TRUE)
@@ -86,15 +86,22 @@ the USA.
 
 ``` r
 plotDat <- obtainSmoothTrend(obj1, grid = c(200, 300), includeIntercept = TRUE)
-usa = maps::map("usa", regions = "main", plot = FALSE)
-v <- sp::point.in.polygon(plotDat$lon, plotDat$lat, usa$x, usa$y)
-plotDat <- plotDat[v == 1, ]
+plotDat <- sf::st_as_sf(plotDat, coords = c("lon", "lat"))
+usa <- sf::st_as_sf(maps::map("usa", regions = "main", plot = FALSE))
+sf::st_crs(usa) <- sf::st_crs(plotDat)
+intersection <- sf::st_intersects(plotDat, usa)
+plotDat <- plotDat[!is.na(as.numeric(intersection)), ]
 
-ggplot(plotDat, aes(x = lon, y = lat, fill = ypred)) +
-  geom_tile(show.legend = TRUE) +
+ggplot(usa) + 
+  geom_sf(color = NA) +
+  geom_tile(data = plotDat, 
+            mapping = aes(geometry = geometry, fill = ypred), 
+            linewidth = 0,
+            stat = "sf_coordinates") +
   scale_fill_gradientn(colors = topo.colors(100))+
-  labs(title = "Precipitation (anomaly) US April 1948", x = "Longitude", y = "Latitude") +
-  coord_fixed() +
+  labs(title = "Precipitation (anomaly)", 
+       x = "Longitude", y = "Latitude") +
+  coord_sf() +
   theme(panel.grid = element_blank())
 ```
 
@@ -110,12 +117,20 @@ vignette("Solving_Linear_Mixed_Models")
 
 <div id="refs" class="references csl-bib-body hanging-indent">
 
+<div id="ref-boer2023" class="csl-entry">
+
+Boer, Martin P. 2023. “Tensor Product P-Splines Using a Sparse Mixed
+Model Formulation.” *Statistical Modelling* 23 (5-6): 465–79.
+https://doi.org/<https://doi.org/10.1177/1471082X231178591>.
+
+</div>
+
 <div id="ref-Boer2020" class="csl-entry">
 
-Boer, Martin P., Hans Peter Piepho, and Emlyn R. Williams. 2020. “<span
-class="nocase">Linear Variance, P-splines and Neighbour Differences for
-Spatial Adjustment in Field Trials: How are they Related?</span>” *J.
-Agric. Biol. Environ. Stat.* 25 (4): 676–98.
+Boer, Martin P., Hans-Peter Piepho, and Emlyn R. Williams. 2020.
+“<span class="nocase">Linear Variance, P-splines and Neighbour
+Differences for Spatial Adjustment in Field Trials: How are they
+Related?</span>” *J. Agric. Biol. Environ. Stat.* 25 (4): 676–98.
 <https://doi.org/10.1007/S13253-020-00412-4>.
 
 </div>
@@ -123,10 +138,10 @@ Agric. Biol. Environ. Stat.* 25 (4): 676–98.
 <div id="ref-Bustos-Korts2019" class="csl-entry">
 
 Bustos-Korts, Daniela, Martin P. Boer, Marcos Malosetti, Scott Chapman,
-Karine Chenu, Bangyou Zheng, and Fred A. van Eeuwijk. 2019. “<span
-class="nocase">Combining Crop Growth Modeling and Statistical Genetic
-Modeling to Evaluate Phenotyping Strategies</span>.” *Front. Plant Sci.*
-10 (November). <https://doi.org/10.3389/fpls.2019.01491>.
+Karine Chenu, Bangyou Zheng, and Fred A. van Eeuwijk. 2019.
+“<span class="nocase">Combining Crop Growth Modeling and Statistical
+Genetic Modeling to Evaluate Phenotyping Strategies</span>.” *Front.
+Plant Sci.* 10 (November). <https://doi.org/10.3389/fpls.2019.01491>.
 
 </div>
 

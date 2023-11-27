@@ -18,7 +18,8 @@ LMMsolve(
   tolerance = 1e-06,
   trace = FALSE,
   maxit = 250,
-  theta = NULL
+  theta = NULL,
+  grpTheta = NULL
 )
 }
 \arguments{
@@ -66,6 +67,9 @@ algorithm. Default \code{maxit = 250}.}
 
 \item{theta}{initial values for penalty or precision parameters. Default
 \code{NULL}, all precision parameters set equal to 1.}
+
+\item{grpTheta}{a vector to give components the same penalty. Default
+\code{NULL}, all components have a separate penalty.}
 }
 \value{
 An object of class \code{LMMsolve} representing the fitted model.

@@ -48,6 +48,8 @@
 #' algorithm. Default \code{maxit = 250}.
 #' @param theta initial values for penalty or precision parameters. Default
 #' \code{NULL}, all precision parameters set equal to 1.
+#' @param grpTheta a vector to give components the same penalty. Default
+#' \code{NULL}, all components have a separate penalty.
 #'
 #' @return An object of class \code{LMMsolve} representing the fitted model.
 #' See \code{\link{LMMsolveObject}} for a full description of the components in
@@ -113,7 +115,8 @@ LMMsolve <- function(fixed,
                      tolerance = 1.0e-6,
                      trace = FALSE,
                      maxit = 250,
-                     theta = NULL) {
+                     theta = NULL,
+                     grpTheta = NULL) {
   ## Input checks.
   if (!inherits(data, "data.frame")) {
     stop("data should be a data.frame.\n")
@@ -148,17 +151,6 @@ LMMsolve <- function(fixed,
          (is.matrix(x) || spam::is.spam(x)) && isSymmetric(x)}))))) {
     stop("ginverse should be a named list of symmetric matrices.\n")
   }
-  if (!is.null(weights)) {
-    if (!(weights %in% colnames(data))) {
-      stop("weights not defined in dataframe data")
-    }
-    w <- data[[weights]]
-    if (!is.numeric(w) || sum(is.na(w)) != 0 || min(w) < 0) {
-      stop("weights should be a numeric vector with non-negative values")
-    }
-  } else {
-    w <- rep(1, nrow(data))
-  }
   if (!is.null(residual) &&
       (!inherits(residual, "formula") || length(terms(residual)) != 2)) {
     stop("residual should be a formula of the form \" ~ pred\".\n")
@@ -178,8 +170,20 @@ LMMsolve <- function(fixed,
     warning(sum(respVarNA), " observations removed with missing value for ",
             respVar, ".\n", call. = FALSE)
     data <- data[!respVarNA, ]
-    ## remove missing values for weight (default w=1).
-    w <- w[!respVarNA]
+  }
+  ## Check for weights should be done after removing observations with NA for
+  ## response var. This prevents error messages when both response var and
+  ## weight are NA.
+  if (!is.null(weights)) {
+    if (!(weights %in% colnames(data))) {
+      stop("weights not defined in dataframe data")
+    }
+    w <- data[[weights]]
+    if (!is.numeric(w) || sum(is.na(w)) != 0 || min(w) < 0) {
+      stop("weights should be a numeric vector with non-negative values")
+    }
+  } else {
+    w <- rep(1, nrow(data))
   }
   ## Remove observations with zero weights
   weightsZero <- w == 0
@@ -307,14 +311,14 @@ LMMsolve <- function(fixed,
   mf <- model.frame(fixed, data, drop.unused.levels = TRUE)
   mt <- terms(mf)
   f.terms <- all.vars(mt)[attr(mt, "dataClasses") == "factor"]
-  X <- model.matrix(mt, data = mf,
+  X <- Matrix::sparse.model.matrix(mt, data = mf,
                     contrasts.arg = lapply(X = mf[, f.terms, drop = FALSE],
                                            FUN = contrasts, contrasts = TRUE))
   term.labels.f <- attr(mt, "term.labels")
 
-  q <- qr(X)
-  remCols <- q$pivot[-seq(q$rank)]
-  if (length(remCols) > 0) {
+  q <- qr(as.matrix(X))
+  if (q$rank != ncol(X)) {
+    remCols <- q$pivot[-seq(q$rank)]
     ## Compare terms before and after removing extra columns.
     ## If a complete term is removed, it also has to be removed from the labels.
     f.terms.orig <- as.numeric(names(table(attr(X, "assign"))))
@@ -329,8 +333,9 @@ LMMsolve <- function(fixed,
   } else {
     dim.f <- as.numeric(table(attr(X, "assign")))
   }
+
   ## calculate NomEff dimension for non-spline part
-  Xs <- spam::as.spam(X)
+  Xs <- spam::as.spam.dgCMatrix(X)
   NomEffDimRan <- calcNomEffDim(Xs, Z, dim.r, term.labels.r)
   ## Add spline part.
   splResList <- NULL
@@ -390,8 +395,9 @@ LMMsolve <- function(fixed,
            levelsNoVar, "\n")
     }
   }
-  ## Make X sparse.
-  Xs <- spam::as.spam(X)
+  ## Convert to spam matrix and cleanup
+  Xs <- spam::as.spam.dgCMatrix(X)
+  Xs <- spam::cleanup(Xs)
   ## Fit the model.
   if (!is.null(theta)) {
     if (length(theta) != length(scFactor)) {
@@ -401,10 +407,19 @@ LMMsolve <- function(fixed,
   } else {
     theta <- 1 / scFactor
   }
+  if (!is.null(grpTheta)) {
+    if (length(grpTheta) != length(scFactor)) {
+      stop("Argument grpTheta has wrong length \n")
+    }
+  } else {
+    grpTheta <- c(1:length(scFactor))
+  }
+
+
   if (family$family == "gaussian") {
     obj <- sparseMixedModels(y = y, X = Xs, Z = Z, lGinv = lGinv, lRinv = lRinv,
                              tolerance = tolerance, trace = trace, maxit = maxit,
-                             theta = theta)
+                             theta = theta, grpTheta=grpTheta)
   } else {
     ## MB, 23 jan 2023
     ## binomial needs global weights
@@ -425,7 +440,8 @@ LMMsolve <- function(fixed,
       lRinv <- constructRinv(df = data, residual = residual, weights = wGLM)
       obj <- sparseMixedModels(y = z, X = Xs, Z = Z, lGinv = lGinv, lRinv = lRinv,
                                tolerance = tolerance, trace = trace, maxit = maxit,
-                               theta = theta, fixedTheta = fixedTheta)
+                               theta = theta, fixedTheta = fixedTheta,
+                               grpTheta = grpTheta)
       eta.old <- eta
       eta <- obj$yhat + offset
       mu <- family$linkinv(eta)
