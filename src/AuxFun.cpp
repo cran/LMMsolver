@@ -9,50 +9,38 @@ using namespace std;
 // Transform to C++ Notation indices
 void transf2C(IntegerVector& ndx)
 {
-  for (int i=0;i<ndx.size();i++)
+  const int n = ndx.size();
+  for (int i=0;i<n;i++)
   {
     ndx[i]--;
   }
 }
 
-// not very efficient (but not too bad): Make a Class?
-double getvalueC(IntegerVector rowpointers,
-                 IntegerVector colindices,
-                 NumericVector entries,
-                 int i,
-                 int j)
+// [[Rcpp::export]]
+IntegerVector GetIntVector(Rcpp::S4 obj, const String& slotName, int ArrayIndexing)
 {
-  int s = rowpointers[i];
-  int e = rowpointers[i+1];
-  for (int k=s;k<e;k++)
-  {
-    if (colindices[k] == j) return entries[k];
+  IntegerVector x = Rcpp::clone<Rcpp::IntegerVector>(obj.slot(slotName));
+  if (ArrayIndexing == 0) {
+    transf2C(x);
+    return x;
   }
-  return 0.0;
+  if (ArrayIndexing == 1) {
+    return x;
+  }
+  stop("argument ArrayIndex should be 0-based (C/C++) or 1-based (R).");
+  return x;
 }
 
-vector<double> convert_matrix(const vector<int>& rowindices_ext,
-                              const vector<int>& colindices_ext,
-                              const IntegerVector& pivot,
-                              SEXP A)
+NumericVector GetNumericVector(Rcpp::S4 obj, const String& slotName) {
+  NumericVector x = Rcpp::clone<Rcpp::NumericVector>(obj.slot(slotName));
+  return x;
+}
+
+// insert element J in link starting at HEAD[i]
+void insert(IntegerVector& HEAD, IntegerVector& LINK, int i, int J)
 {
-  Rcpp::S4 obj(A);
-  IntegerVector rowpointers = Rcpp::clone<Rcpp::IntegerVector>(obj.slot("rowpointers"));
-  IntegerVector colindices  = Rcpp::clone<Rcpp::IntegerVector>(obj.slot("colindices"));
-  NumericVector entries     = obj.slot("entries") ;
-
-  transf2C(rowpointers);
-  transf2C(colindices);
-
-  const int Nrow = rowindices_ext.size();
-  std::vector<double> z(Nrow);
-  for (int i=0;i<Nrow;i++)
-  {
-    int r = rowindices_ext[i];
-    int c = colindices_ext[i];
-    double x = getvalueC(rowpointers,colindices,entries,pivot[r],pivot[c]);
-    z[i] = x;
-  }
-  return z;
+  int x = HEAD[i];
+  HEAD[i] = J;
+  LINK[J] = x;
 }
 

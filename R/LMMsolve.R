@@ -213,9 +213,9 @@ LMMsolve <- function(fixed,
     mt <- terms(mf)
     f.terms <- all.vars(mt)[attr(mt, "dataClasses") == "factor"]
     Z1 <- Matrix::sparse.model.matrix(mt, data = mf,
-                       contrasts.arg = lapply(X = mf[, f.terms, drop = FALSE],
-                                              FUN = contrasts,
-                                              contrasts = FALSE))
+                                      contrasts.arg = lapply(X = mf[, f.terms, drop = FALSE],
+                                                             FUN = contrasts,
+                                                             contrasts = FALSE))
     dim1.r <- table(attr(Z1, "assign"))[-1]
     term1.labels.r <- attr(mt, "term.labels")
     scFactor1 <- rep(1, length(dim1.r))
@@ -274,7 +274,7 @@ LMMsolve <- function(fixed,
     for (i in 1:length(dim.r)) {
       tmp <- rep(0, sum(dim.r))
       tmp[s[i]:e[i]] <- 1
-      lGinv[[i]] <- spam::diag.spam(tmp)
+      lGinv[[i]] <- spam::cleanup(spam::diag.spam(tmp))
     }
     names(lGinv) <- term.labels.r
   } else {
@@ -312,8 +312,8 @@ LMMsolve <- function(fixed,
   mt <- terms(mf)
   f.terms <- all.vars(mt)[attr(mt, "dataClasses") == "factor"]
   X <- Matrix::sparse.model.matrix(mt, data = mf,
-                    contrasts.arg = lapply(X = mf[, f.terms, drop = FALSE],
-                                           FUN = contrasts, contrasts = TRUE))
+                                   contrasts.arg = lapply(X = mf[, f.terms, drop = FALSE],
+                                                          FUN = contrasts, contrasts = TRUE))
   term.labels.f <- attr(mt, "term.labels")
 
   q <- qr(as.matrix(X))
@@ -333,12 +333,15 @@ LMMsolve <- function(fixed,
   } else {
     dim.f <- as.numeric(table(attr(X, "assign")))
   }
+  nNonSplinesRandom <- length(dim.r)
 
-  ## calculate NomEff dimension for non-spline part
-  Xs <- spam::as.spam.dgCMatrix(X)
-  NomEffDimRan <- calcNomEffDim(Xs, Z, dim.r, term.labels.r)
+  ## Convert to spam matrix and cleanup
+  #Xs <- spam::as.spam.dgCMatrix(X)
+  #Xs <- spam::cleanup(Xs)
+
   ## Add spline part.
   splResList <- NULL
+  NomEffDimRan <- NULL
   if (!is.null(spline)) {
     splTerms <- labels(splTrms)
     Nterms <- length(splTerms)
@@ -370,6 +373,18 @@ LMMsolve <- function(fixed,
       scFactor <- c(scFactor, splRes$scaleFactor)
     }
   }
+
+  ## Convert to spam matrix and cleanup
+  Xs <- spam::as.spam.dgCMatrix(X)
+  Xs <- spam::cleanup(Xs)
+
+  if (nNonSplinesRandom > 0) {
+    ## calculate NomEff dimension for non-spline part
+    NomEffDimNonSplines <- calcNomEffDim(Xs, Z, dim.r[c(1:nNonSplinesRandom)], term.labels.r)
+    ## combine with splines part
+    NomEffDimRan <- c(NomEffDimNonSplines, NomEffDimRan)
+  }
+
   ## Add intercept.
   if (attr(mt, "intercept") == 1) {
     term.labels.f <- c("(Intercept)", term.labels.f)
@@ -395,9 +410,6 @@ LMMsolve <- function(fixed,
            levelsNoVar, "\n")
     }
   }
-  ## Convert to spam matrix and cleanup
-  Xs <- spam::as.spam.dgCMatrix(X)
-  Xs <- spam::cleanup(Xs)
   ## Fit the model.
   if (!is.null(theta)) {
     if (length(theta) != length(scFactor)) {
@@ -415,11 +427,10 @@ LMMsolve <- function(fixed,
     grpTheta <- c(1:length(scFactor))
   }
 
-
   if (family$family == "gaussian") {
     obj <- sparseMixedModels(y = y, X = Xs, Z = Z, lGinv = lGinv, lRinv = lRinv,
                              tolerance = tolerance, trace = trace, maxit = maxit,
-                             theta = theta, grpTheta=grpTheta)
+                             theta = theta, grpTheta = grpTheta)
   } else {
     ## MB, 23 jan 2023
     ## binomial needs global weights
@@ -432,6 +443,7 @@ LMMsolve <- function(fixed,
     nNonRes <- length(theta) - nRes
     fixedTheta <- c(rep(FALSE, nNonRes), rep(TRUE, nRes))
     theta[(nNonRes + 1):(nNonRes + nRes)] <- 1
+    trace_GLMM <- NULL
     for (i in 1:maxit) {
       deriv <- family$mu.eta(eta)
       z <- (eta - offset) + (y - mu)/deriv
@@ -447,6 +459,10 @@ LMMsolve <- function(fixed,
       mu <- family$linkinv(eta)
       theta <- obj$theta
       tol <- sum((eta - eta.old)^2) / sum(eta^2)
+
+      aux.df <- data.frame(itOuter = rep(i, obj$nIter),
+                           tol=c(rep(NA,obj$nIter-1), tol))
+      trace_GLMM <- rbind(trace_GLMM, cbind(aux.df, obj$trace))
       if (trace) {
         cat("Generalized Linear Mixed Model iteration", i, ", tol=", tol, "\n")
       }
@@ -459,12 +475,12 @@ LMMsolve <- function(fixed,
   ef <- cumsum(dim.f)
   sf <- ef - dim.f + 1
   ndxCoefF <- nameCoefs(coefs = ndxCf, desMat = X, termLabels = term.labels.f,
-                     s = sf, e = ef, data = data, type = "fixed")
+                        s = sf, e = ef, data = data, type = "fixed")
   ## Random terms.
   er <- sum(dim.f) + cumsum(dim.r)
   sr <- er - dim.r + 1
-  ndxCoefR <- nameCoefs(coefs = ndxCf, termLabels = term.labels.r, s = sr, e = er,
-                     data = data, group = group, type = "random")
+  ndxCoefR <- nameCoefs(coefs = ndxCf, termLabels = term.labels.r, s = sr,
+                        e = er, data = data, group = group, type = "random")
   ## Combine result for fixed and random terms.
   ndxCoefTot <- c(ndxCoefF, ndxCoefR)
   names(ndxCoefTot) <- c(term.labels.f, term.labels.r)
@@ -504,6 +520,11 @@ LMMsolve <- function(fixed,
   ## Compute REML constant.
   constantREML <- -0.5 * log(2 * pi) * (length(y) - sum(dim.f))
   dim <- c(dim.f, dim.r)
+  if (family$family == "gaussian") {
+    trace <- obj$trace
+  } else {
+    trace <- trace_GLMM
+  }
   return(LMMsolveObject(logL = obj$logL,
                         sigma2e = obj$sigma2e,
                         tau2e = obj$tau2e,
@@ -529,5 +550,6 @@ LMMsolve <- function(fixed,
                         term.labels.f = term.labels.f,
                         term.labels.r = term.labels.r,
                         splRes = splResList,
-                        family = family))
+                        family = family,
+                        trace = trace))
 }

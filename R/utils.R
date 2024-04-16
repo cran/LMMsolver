@@ -229,8 +229,9 @@ calcNomEffDim <- function(X,
       XZ <- cbind(X, Zi)
       r <- qr(as.matrix(XZ))$rank
       if (r == p) {
-        stop("Singularity problem with term", term.labels.r[i],
-             "in the random part of the model")
+        stop("Singularity problem with term ", term.labels.r[i],
+             " in the random part of the model.\n",
+             call. = FALSE)
       }
       EDnom[i] <- r - p
     }
@@ -421,12 +422,17 @@ nameCoefs <- function(coefs,
       isFactLab <- sapply(X = data[, labISplit], FUN = is.factor)
       labDatFact <- unique(data[names(isFactLab)[isFactLab]])
       labDatNonFact <- names(isFactLab)[!isFactLab]
-      if (length(labDatNonFact) > 0) {
-        labDat <- cbind(labDatFact, labDatNonFact)
+      if (length(labDatFact) > 0 && length(labDatNonFact) > 0) {
+        labDatNonFactDf <- as.data.frame(matrix(data = labDatNonFact,
+                                                nrow = nrow(labDatFact),
+                                                ncol = length(labDatNonFact),
+                                                byrow = TRUE,
+                                                dimnames = list(NULL, labDatNonFact)))
+        labDat <- cbind(labDatFact, labDatNonFactDf)
         colnames(labDat) <- c(colnames(labDatFact), labDatNonFact)
         labDat <- labDat[labISplit]
       } else {
-        labDat <- labDatFact
+        labDat <- if (length(labDatFact) > 0) labDatFact else labDatNonFact
       }
       labDat <- lapply(X = seq_along(labDat), FUN = function(i) {
         if (isFactLab[i]) {
@@ -512,6 +518,28 @@ extSpamMatrix <- function(X,
   X@dimension[1] <- N
   X@rowpointers <- rPtr
   return(X)
+}
+
+#' Helper function for checking limits
+#' The same check is done in the different spline functions so a helper
+#' function is created to avoid duplicate code.
+#'
+#' @noRd
+#' @keywords internal
+checkLim <- function(lim,
+                     limName,
+                     x,
+                     xName) {
+  if (!is.numeric(lim)) {
+    stop(limName, " should be numeric.\n", call. = FALSE)
+  }
+  if (length(lim) != 2) {
+    stop(limName, " should be a vector of length two.\n", call. = FALSE)
+  }
+  if (lim[1] > range(x)[1] || lim[2] < range(x)[2]) {
+    stop("All values of ", xName , " should be between the lower ",
+         "and upper value of ", limName, ".\n", call. = FALSE)
+  }
 }
 
 

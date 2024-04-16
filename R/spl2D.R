@@ -7,8 +7,8 @@ spl2D <- function(x1,
                   pord = 2,
                   degree = 3,
                   scaleX = TRUE,
-                  x1lim = NULL,
-                  x2lim = NULL,
+                  x1lim = range(x1),
+                  x2lim = range(x2),
                   cond = NULL,
                   level = NULL) {
   ## Checks.
@@ -42,19 +42,9 @@ spl2D <- function(x1,
     x1 <- x1[ndx]
     x2 <- x2[ndx]
   }
-  if (is.null(x1lim)) { x1lim <- range(x1) }
-  if (is.null(x2lim)) { x2lim <- range(x2) }
-  if (!is.numeric(x1lim) || length(x1lim) != 2 ||
-      x1lim[1] > range(x1)[1] || x1lim[2] < range(x1)[2]) {
-    stop("x1lim should be a vector of length two with all values of ", x1Name,
-         " between its lower and upper value.\n")
-  }
-  if (!is.numeric(x2lim) || length(x2lim) != 2 ||
-      x2lim[1] > range(x2)[1] || x2lim[2] < range(x2)[2]) {
-    stop("x2lim should be a vector of length two with all values of ", x2Name,
-         " between its lower and upper value.\n")
-  }
-  knots <- list()
+  checkLim(lim = x1lim, limName = "x1lim", x = x1, xName = x1Name)
+  checkLim(lim = x2lim, limName = "x2lim", x = x2, xName = x2Name)
+  knots <- vector(mode = "list", length = 2)
   knots[[1]] <- PsplinesKnots(x1lim[1], x1lim[2], degree = degree, nseg = nseg[1])
   knots[[2]] <- PsplinesKnots(x2lim[1], x2lim[2], degree = degree, nseg = nseg[2])
   B1 <- Bsplines(knots[[1]], x1)

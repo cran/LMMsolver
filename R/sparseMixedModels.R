@@ -19,19 +19,19 @@ calcSumSquares <- function(lYtRinvY,
                            a,
                            Nvarcomp) {
   SSr1 <- unlist(lYtRinvY)
-  SSr2 <- sapply(X=lWtRinvY, FUN = function(X) { sum(a*X) })
-  SSr3 <- sapply(X=lWtRinvW, FUN = function(X) { quadForm(a, X)})
-  SSr <- SSr1 - 2*SSr2 + SSr3
+  SSr2 <- sapply(X = lWtRinvY, FUN = function(x) { sum(a * x) })
+  SSr3 <- sapply(X = lWtRinvW, FUN = function(x) { quadForm(a, x)})
+  SSr <- SSr1 - 2 * SSr2 + SSr3
   if (Nvarcomp > 0) {
-    SSa <- sapply(X = lQ, FUN = function(X) {
-      quadForm(a, X)
+    SSa <- sapply(X = lQ, FUN = function(x) {
+      quadForm(a, x)
     })
     SS_all <- c(SSa, SSr)
   } else {
     SS_all <- SSr
   }
   # make sure sum of squares are all positive.
-  SS_all <- sapply(X = SS_all, FUN = function(x) {max(1.0e-12, x)})
+  SS_all <- pmax(SS_all, 1e-12)
   return(SS_all)
 }
 
@@ -43,7 +43,7 @@ sparseMixedModels <- function(y,
                               lGinv,
                               lRinv,
                               maxit = 100,
-                              tolerance = 1.0e-6,
+                              tolerance = 1e-6,
                               trace = FALSE,
                               theta = NULL,
                               fixedTheta = NULL,
@@ -61,7 +61,7 @@ sparseMixedModels <- function(y,
     # if x is diagonal calculate x %*% W in a more efficient way
     if (isTRUE(all.equal(spam::diag.spam(d), x))) {
       xW <- W
-      xW@entries <- xW@entries * rep(d, times=diff(xW@rowpointers))
+      xW@entries <- xW@entries * rep(d, times = diff(xW@rowpointers))
     } else {
       xW <- x %*% W
     }
@@ -69,8 +69,8 @@ sparseMixedModels <- function(y,
   })
   lWtRinvY <- lapply(X = lRinv, FUN = function(x) {
     spam::crossprod.spam(W, x %*% y) })
-  lYtRinvY <- lapply(X =lRinv, FUN= function(x) {
-    quadForm(y,x) })
+  lYtRinvY <- lapply(X = lRinv, FUN= function(x) {
+    quadForm(y, x) })
 
   ## Extend lGinv with extra zeros for fixed effect.
   lQ <- lapply(X = lGinv, FUN = function(x) {
@@ -82,27 +82,30 @@ sparseMixedModels <- function(y,
   lWtRinvW <- lapply(X = lWtRinvW, FUN = spam::cleanup)
   lQ <- lapply(X = lQ, FUN = spam::cleanup)
   lGinv <- lapply(X = lGinv, FUN = spam::cleanup)
+  lRinv <- lapply(X = lRinv, FUN = spam::cleanup)
   lC <- lapply(X = lC, FUN = spam::cleanup)
   if (is.null(theta)) {
     theta <- rep(1, Nvarcomp + Nres)
+    theta_restr <- theta
+  } else {
+    theta_restr <- theta
   }
   if (is.null(fixedTheta)) {
     ## Fix a penalty theta, if value becomes high.
     fixedTheta <- rep(FALSE, length = NvarcompTot)
   }
   if (!is.null(grpTheta)) {
-    ##
-    ## here should be some checks
-    ##
     nGrp <- max(grpTheta)
-    conM <- spam::spam(x=0, nrow=NvarcompTot, ncol=nGrp)
+    if (length(fixedTheta) != nGrp) {
+      stop("problem with number of groups defined in grpTheta argument")
+    }
+    conM <- spam::spam(x = 0, nrow = NvarcompTot, ncol = nGrp)
     for (i in 1:NvarcompTot) {
       conM[i, grpTheta[i]] <- 1
     }
-    # Need to be checked, for the moment all FALSE:
-    fixedThetaRes <- rep(FALSE, length= nGrp)
+    fixedThetaRes <- fixedTheta
   } else {
-    conM <- spam::diag(1,NvarcompTot)
+    conM <- spam::diag(1, NvarcompTot)
     fixedThetaRes <- fixedTheta
   }
 
@@ -114,19 +117,18 @@ sparseMixedModels <- function(y,
     phi <- theta
   }
 
-  ## Check the stucture of Rinv, don't allow for overlapping
-  ## penalties
-  M <- sapply(lRinv,FUN=function(x) {
-    as.integer(abs(spam::diag.spam(x))>getOption("spam.eps"))})
+  ## Check the stucture of Rinv, don't allow for overlapping penalties
+  M <- sapply(lRinv, FUN = function(x) {
+    abs(spam::diag.spam(x)) > getOption("spam.eps")})
   rSums <- rowSums(M)
   #if (!isTRUE(all.equal(rSums, rep(1, nrow(M))))) {
   if (max(rSums) > 1) {
-    stop("overlapping penalties for residual part") }
-
-  # calculate number of elements per group for residuals
+    stop("Overlapping penalties for residual part.\n")
+  }
+  ## Calculate number of elements per group for residuals.
   nR <- colSums(M)
   EDmax_phi <- nR
-  Rinv <- Reduce("+",lRinv)
+  Rinv <- Reduce("+", lRinv)
   logdetRinvConstant <- as.numeric(spam::determinant.spam(Rinv)$modulus)
 
   ## Make ADchol for Ginv and C:
@@ -141,19 +143,19 @@ sparseMixedModels <- function(y,
   if (trace) {
     cat("iter logLik\n")
   }
-  for (it in 1:maxit) {
+  traceDf <- NULL
+  for (it in seq_len(maxit)) {
     if (Nvarcomp > 0) {
-      psi <- theta[1:length(psi)]
-      phi <- theta[-(1:length(psi))]
+      psi <- theta[seq_along(psi)]
+      phi <- theta[-(seq_along(psi))]
     } else {
       psi <- NULL
       phi <- theta
     }
+    ## calculate logdet for Rinv.
+    logdetR <- -sum(nR * log(phi)) - logdetRinvConstant
 
-    ## calculate logdet for Rinv
-    logdetR <- -sum(nR*log(phi)) - logdetRinvConstant
-
-    ## calculated logdet and dlogdet for Ginv and C
+    ## calculated logdet and dlogdet for Ginv and C.
     ## Ginv, if exists
     if (!is.null(ADcholGinv)) {
       dlogdetGinv <- dlogdet(ADcholGinv, psi)
@@ -161,14 +163,14 @@ sparseMixedModels <- function(y,
     } else {
       logdetG <- 0
     }
-    ## update the expressions including Rinv
+    ## update the expressions including Rinv.
     YtRinvY <- sum(phi * unlist(lYtRinvY))
     WtRinvY <- as.vector(linearSum(theta = phi, matrixList = lWtRinvY))
 
-    ## matrix C
+    ## matrix C.
     dlogdetC <- dlogdet(ADcholC, theta, WtRinvY)
     logdetC <- attr(dlogdetC, which = "logdet")
-    a <- attr(dlogdetC,which="x.coef")
+    a <- attr(dlogdetC, which = "x.coef")
 
     ## calculate effective dimensions.
     if (!is.null(ADcholGinv)) {
@@ -179,17 +181,19 @@ sparseMixedModels <- function(y,
     EDmax <- c(EDmax_psi, EDmax_phi)
     ED <- EDmax - theta * dlogdetC
 
-    ## to make sure ED is always positive
+    ## to make sure ED is always positive.
     ED <- pmax(ED, .Machine$double.eps)
 
-    ## calculate Sum of Squares
+    ## calculate Sum of Squares.
     SS_all <- calcSumSquares(lYtRinvY, lWtRinvY, lWtRinvW, lQ, a, Nvarcomp)
 
-    ## Johnson and Thompson 1995, see below eq [A5]: Py = R^{-1} r
-    yPy <- YtRinvY - sum(a*WtRinvY)
+    ## Johnson and Thompson 1995, see below eq [A5]: Py = R^{-1} r.
+    yPy <- YtRinvY - sum(a * WtRinvY)
 
-    ## calculate REMLlogL, see e.g. Smith 1995
+    ## calculate REMLlogL, see e.g. Smith 1995.
     logL <- -0.5 * (logdetR + logdetG + logdetC + yPy)
+    ## Add to trace.
+    traceDf <- rbind(traceDf, c(iter = it, logLik = logL, ED))
 
     if (trace) {
       cat(sprintf("%4d %8.4f\n", it, logL))
@@ -199,11 +203,11 @@ sparseMixedModels <- function(y,
     }
     ED_restr <- as.vector(ED %*% conM)
     SS_all_restr <- as.vector(SS_all %*% conM)
-    theta_restr <- ifelse(fixedThetaRes, theta_restr, ED_restr/SS_all_restr)
+    theta_restr <- ifelse(fixedThetaRes, theta_restr, ED_restr / SS_all_restr)
     theta <- as.vector(conM %*% theta_restr)
 
-    fixedTheta <- (theta > 1.0e6) | (fixedTheta == TRUE)
-    fixedThetaRes <- (theta_restr > 1.0e6) | (fixedThetaRes == TRUE)
+    fixedTheta <- theta > 1.0e6 | fixedTheta
+    fixedThetaRes <- theta_restr > 1.0e6 | fixedThetaRes
 
     logLprev <- logL
   }
@@ -223,9 +227,12 @@ sparseMixedModels <- function(y,
   names(phi) <- names(lRinv)
   names(psi) <- names(lGinv)
   EDnames <- c(names(lGinv), names(lRinv))
+  traceDf <- data.frame(traceDf)
+  colnames(traceDf)[-(1:2)] <- paste("ED", EDnames)
   L <- list(logL = logL, sigma2e = 1 / phi, tau2e = 1 / psi, ED = ED,
             theta = theta, EDnames = EDnames, a = a, yhat = yhat,
-            residuals = r, nIter = it, C = C, cholC = cholC)
+            residuals = r, nIter = it, C = C, cholC = cholC,
+            trace = traceDf)
   return(L)
 }
 
