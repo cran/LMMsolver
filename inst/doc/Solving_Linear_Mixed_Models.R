@@ -9,42 +9,281 @@ knitr::opts_chunk$set(
 library(LMMsolver)
 library(ggplot2)
 
+## ----linearFun----------------------------------------------------------------
+  f1 <- function(x) { 0.6 + 0.7*x}
+
+## ----linearFunSim-------------------------------------------------------------
+set.seed(2016)
+n <- 25
+x <- seq(0, 1, length = n)
+sigma2e <- 0.04
+y <- f1(x) + rnorm(n, sd = sqrt(sigma2e))
+dat1 <- data.frame(x = x, y = y)
+
+## ----fit1---------------------------------------------------------------------
+obj1 <- LMMsolve(fixed = y ~ x, data = dat1)
+
+## ----predictlin---------------------------------------------------------------
+newdat <- data.frame(x = seq(0, 1, length = 300))
+pred1 <- predict(obj1, newdata = newdat, se.fit = TRUE)
+# adding the true values for comparison
+pred1$y_true <- f1(pred1$x)
+
+## ----ggplotLinear-------------------------------------------------------------
+ggplot(data = dat1, aes(x = x, y = y)) +
+  geom_point(col = "black", size = 1.5) +
+  geom_line(data = pred1, aes(y=y_true), color = "red", 
+            linewidth = 1, linetype = "dashed") +
+  geom_line(data = pred1, aes(y = ypred), color = "blue", linewidth = 1) +
+  geom_ribbon(data = pred1, aes(x=x,ymin = ypred-2*se, ymax = ypred+2*se),
+              alpha = 0.2, inherit.aes = FALSE) + 
+  theme_bw()
+
+## ----nonlinearFun-------------------------------------------------------------
+f2 <- function(x) { 0.3 + 0.4*x + 0.2*sin(20*x) }
+
+## ----simDat2------------------------------------------------------------------
+set.seed(12)
+n <- 150
+x <- seq(0, 1, length = n)
+sigma2e <- 0.04
+y <- f2(x) + rnorm(n, sd = sqrt(sigma2e))
+dat2 <- data.frame(x, y)
+
+## ----nonlinearFit-------------------------------------------------------------
+obj2 <- LMMsolve(fixed = y ~ 1, 
+                 spline = ~spl1D(x, nseg = 50), 
+                 data = dat2)
+
+## ----summary_nonlinear--------------------------------------------------------
+summary(obj2)
+
+## ----predict_non--------------------------------------------------------------
+newdat <- data.frame(x = seq(0, 1, length = 300))
+pred2 <- predict(obj2, newdata = newdat, se.fit = TRUE)
+pred2$y_true <- f2(pred2$x)
+
+ggplot(data = dat2, aes(x = x, y = y)) +
+  geom_point(col = "black", size = 1.5) +
+  geom_line(data = pred2, aes(y = y_true), color = "red", 
+            linewidth = 1, linetype ="dashed") +
+  geom_line(data = pred2, aes(y = ypred), color = "blue", linewidth = 1) +
+  geom_ribbon(data= pred2, aes(x=x, ymin = ypred-2*se, ymax = ypred+2*se),
+              alpha=0.2, inherit.aes = FALSE) +
+  theme_bw() 
+
+## ----poissonSim---------------------------------------------------------------
+set.seed(1234)
+n <- 150
+x <- seq(0, 1, length=n)
+fun_lambda <- function(x) { 4 + 3*x + 4*sin(7*x) }
+x <- seq(0, 1, length = n)
+y <- rpois(n = n, lambda = fun_lambda(x)) 
+dat3 <- data.frame(x = x, y = y)
+
+## ----Poisson_LMMsolver--------------------------------------------------------
+obj3 <- LMMsolve(fixed = y ~ 1, 
+                spline = ~spl1D(x, nseg = 50), 
+                family = poisson(), 
+                data = dat3)
+summary(obj3)
+
+## ----predict_poisson----------------------------------------------------------
+newdat <- data.frame(x = seq(0, 1, length = 300))
+pred3 <- predict(obj3, newdata = newdat, se.fit = TRUE)
+pred3$y_true <- fun_lambda(pred3$x)
+
+ggplot(data = dat3, aes(x = x, y = y)) +
+  geom_point(col = "black", size = 1.5) +
+  geom_line(data = pred3, aes(y = y_true), color = "red", 
+            linewidth = 1, linetype ="dashed") +
+  geom_line(data = pred3, aes(y = ypred), color = "blue", linewidth = 1) +
+  geom_ribbon(data= pred3, aes(x=x, ymin = ypred-2*se, ymax = ypred+2*se),
+              alpha=0.2, inherit.aes = FALSE) +
+  theme_bw() 
+
+## ----twoExperiments-----------------------------------------------------------
+set.seed(1234)
+nA <-  50
+nB <- 100
+mu_A <-  0.10
+mu_B <- -0.10
+sigma2e_A <- 0.04
+sigma2e_B <- 0.10
+
+x1 <- runif(n = nA)
+x2 <- runif(n = nB)
+y1 <- f2(x1) + rnorm(nA, sd = sqrt(sigma2e_A)) + mu_A
+y2 <- f2(x2) + rnorm(nB, sd = sqrt(sigma2e_B)) + mu_B
+Experiment <- as.factor(c(rep("A", nA), rep("B", nB)))
+dat4 <- data.frame(x = c(x1, x2), y = c(y1,y2), Experiment = Experiment)
+
+## ----boxplot------------------------------------------------------------------
+ggplot(dat4, aes(x = Experiment, y = y, fill = Experiment)) +  
+  geom_boxplot() + 
+  geom_point(position = position_jitterdodge(), alpha = 0.3) 
+
+## ----twoExpSolve--------------------------------------------------------------
+obj4 <- LMMsolve(fixed= y ~ 1, 
+                 spline = ~spl1D(x, nseg = 50),
+                 random = ~Experiment,
+                 residual = ~Experiment,
+                 data = dat4)
+
+## ----summaryExp---------------------------------------------------------------
+summary(obj4)
+
+## ----twoExpPredict------------------------------------------------------------
+newdat <- data.frame(x=seq(0, 1, length = 300))
+pred4 <- predict(obj4, newdata = newdat, se.fit = TRUE)
+pred4$y_true <- f2(pred4$x)
+ggplot(data = dat4, aes(x = x, y = y, colour = Experiment)) +
+  geom_point(size = 1.5) +
+  geom_line(data = pred4, aes(y = y_true), color="red", 
+            linewidth = 1, linetype = "dashed") +
+  geom_line(data = pred4, aes(y = ypred), color = "blue", linewidth = 1) +
+  geom_ribbon(data = pred4, aes(x = x,ymin = ypred-2*se, ymax = ypred+2*se),
+              alpha = 0.2, inherit.aes = FALSE) + 
+  theme_bw()
+
+## ----coefExp------------------------------------------------------------------
+coef(obj4)$Experiment
+
+## ----USprecip data------------------------------------------------------------
+## Get precipitation data from spam
+data(USprecip, package = "spam")
+
+## Only use observed data
+USprecip <- as.data.frame(USprecip)
+USprecip <- USprecip[USprecip$infill == 1, ]
+
+## ----runobj3------------------------------------------------------------------
+obj5 <- LMMsolve(fixed = anomaly ~ 1,
+                 spline = ~spl2D(x1 = lon, x2 = lat, nseg = c(41, 41)),
+                 data = USprecip)
+
+## ----ED_USprecip--------------------------------------------------------------
+summary(obj5)
+
+## ----pred_USprecip------------------------------------------------------------
+lon_range <- range(USprecip$lon)
+lat_range <- range(USprecip$lat)
+newdat <- expand.grid(lon = seq(lon_range[1], lon_range[2], length = 200),
+                      lat = seq(lat_range[1], lat_range[2], length = 300))
+plotDat5 <- predict(obj5, newdata = newdat)
+
+## ----Plot_USprecip------------------------------------------------------------
+plotDat5 <- sf::st_as_sf(plotDat5, coords = c("lon", "lat"))
+usa <- sf::st_as_sf(maps::map("usa", regions = "main", plot = FALSE))
+sf::st_crs(usa) <- sf::st_crs(plotDat5)
+intersection <- sf::st_intersects(plotDat5, usa)
+plotDat5 <- plotDat5[!is.na(as.numeric(intersection)), ]
+
+ggplot(usa) + 
+  geom_sf(color = NA) +
+  geom_tile(data = plotDat5, 
+            mapping = aes(geometry = geometry, fill = ypred), 
+            linewidth = 0,
+            stat = "sf_coordinates") +
+  scale_fill_gradientn(colors = topo.colors(100))+
+  labs(title = "Precipitation (anomaly)", 
+       x = "Longitude", y = "Latitude") +
+  coord_sf() +
+  theme(panel.grid = element_blank())
+
+## ----SeaSurfaceTemp-----------------------------------------------------------
+data(SeaSurfaceTemp)
+head(SeaSurfaceTemp, 5)
+table(SeaSurfaceTemp$type)
+
+## ----convert_and_split--------------------------------------------------------
+# convert from Kelvin to Celsius
+df <- SeaSurfaceTemp
+df$sst <- df$sst - 273.15
+### split in training and test set
+df_train <- df[df$type == "train", ]
+df_test <- df[df$type == "test", ]
+
+
+## ----SST_raw_data-------------------------------------------------------------
+nasa_palette <- c(
+  "#03006d","#02008f","#0000b6","#0001ef","#0000f6","#0428f6","#0b53f7",
+  "#0f81f3","#18b1f5","#1ff0f7","#27fada","#3efaa3","#5dfc7b","#85fd4e",
+  "#aefc2a","#e9fc0d","#f6da0c","#f5a009","#f6780a","#f34a09","#f2210a",
+  "#f50008","#d90009","#a80109","#730005"
+)
+
+map_layer <- geom_map(
+  data = map_data("world"), map = map_data("world"),
+  aes(group = group, map_id = region),
+  fill = "black", colour = "white", linewidth = 0.1
+)
+
+# Brazil-Malvinas confluence zone
+BM_box <- cbind(lon = c(-60, -48), lat = c(-50, -35))
+
+ggplot() +
+  scale_colour_gradientn(colours = nasa_palette, name = expression(degree*C)) +
+  xlab("Longitude (deg)") + ylab("Latitude (deg)") +
+  map_layer + xlim(BM_box[, "lon"]) + ylim(BM_box[, "lat"]) + theme_bw() +
+  coord_fixed(expand = FALSE) +
+  geom_point(data = df_train, aes(lon, lat, colour = sst), size=0.5)
+
+## ----SeaTempAnalysis----------------------------------------------------------
+obj6 <- LMMsolve(fixed = sst ~ 1, 
+                 spline = ~spl2D(lon, lat, nseg = c(70, 70),
+                                 x1lim = BM_box[, "lon"], x2lim = BM_box[, "lat"]),
+                 data = df_train, tolerance = 1.0e-1)
+summary(obj6)
+
+## ----predictions_grid---------------------------------------------------------
+lon_range <- BM_box[, "lon"]
+lat_range <- BM_box[, "lat"]
+newdat <- expand.grid(lon = seq(lon_range[1], lon_range[2], length = 200),
+                      lat = seq(lat_range[1], lat_range[2], length = 200))
+
+pred_grid <- predict(obj6, newdata = newdat, se.fit=TRUE)
+pred_grid <- pred_grid[pred_grid$se<5, ]
+
+## Plot predictions on a grid
+ggplot(pred_grid) +
+  geom_tile(aes(x = lon, y = lat, fill = ypred)) +
+  scale_fill_gradientn(colours = nasa_palette) +
+  labs(
+    fill = "pred.",
+    x = "Longitude (deg)", y = "Latitude (deg)"
+  ) +
+  map_layer +
+  theme_bw() +
+  coord_fixed(expand = FALSE, xlim = BM_box[, "lon"], ylim = BM_box[, "lat"]) +
+  scale_x_continuous(breaks = c(-58, -54, -50))
+
+## ----seSST--------------------------------------------------------------------
+ ## Plot standard error
+ggplot(pred_grid) +
+   geom_raster(aes(x = lon, y = lat, fill = se)) +
+   scale_fill_distiller(palette = "BrBG", direction = -1) +
+   labs( fill = "s.e.", x = "Longitude (deg)", y = "Latitude (deg)") +
+   map_layer +
+   theme_bw() +
+   coord_fixed(expand = FALSE, xlim = c(-60, -48), ylim = c(-50, -35)) +
+   scale_x_continuous(breaks = c(-58, -54, -50))
+
+## ----test_set-----------------------------------------------------------------
+pred_test <- predict(obj6, newdata = df_test)
+ggplot(pred_test, aes(x = sst,y = ypred)) + geom_point() +
+     xlab("observed SST (Celsius)") + ylab("predicted SST (Celsius)") +
+     geom_abline(intercept=0,slope=1,col='red') + theme_bw()
+
+## ----RMSE_test----------------------------------------------------------------
+Y <- (pred_test$sst - pred_test$ypred)^2
+RMSE <- sqrt(mean(Y))
+round(RMSE, 2)
+
 ## ----oatsdata-----------------------------------------------------------------
 ## Load data.
 data(john.alpha, package = "agridat")
 head(john.alpha)
-
-## ----Pspline1D----------------------------------------------------------------
-## Fit mixed model with fixed and spline part.
-obj1 <- LMMsolve(fixed = yield ~ rep + gen,
-                 spline = ~spl1D(x = plot, nseg = 100),
-                 data = john.alpha)
-
-## ----deviance-----------------------------------------------------------------
-round(deviance(obj1), 2)
-
-## ----summaryED----------------------------------------------------------------
-summary(obj1)
-
-## ----summaryED2, echo=FALSE---------------------------------------------------
-tbl <- summary(obj1)
-EDs <- round(tbl$Effective[5], 1)
-
-## ----coeff_example------------------------------------------------------------
-genEff <- coef(obj1)$gen
-head(genEff, 4)
-
-## ----ObtainSmoothTrend1-------------------------------------------------------
-## Extract smooth trend from mixed model.
-plotDat1 <- obtainSmoothTrend(obj1, grid = 1000, includeIntercept = TRUE)
-head(plotDat1)
-
-## ----plot1D-------------------------------------------------------------------
-## Plot smooth trend.
-ggplot(data = plotDat1, aes(x = plot, y = ypred)) +
-  geom_line(color = "red", linewidth = 1) +
-  labs(title = "Smooth spatial trend oats data", x = "plotnr", y = "yield") +
-  theme(panel.grid = element_blank())
 
 ## ----define LVmodel-----------------------------------------------------------
 ## Add plot as factor.
@@ -59,95 +298,48 @@ LVinv <- 0.5 * (2 * Delta + cN %*% t(cN))
 lGinv <- list(plotF = LVinv)
 
 ## ----modelLV------------------------------------------------------------------
-## Fit mixed model with first degree B-splines and first order differences.
-obj2 <- LMMsolve(fixed = yield ~ rep + gen,
+obj7 <- LMMsolve(fixed = yield ~ rep + gen,
                  random = ~plotF, 
                  ginverse = lGinv, 
                  data = john.alpha)
 
-## ----summaryVAR---------------------------------------------------------------
-summary(obj2, which = "variances")
+## ----summary_dev_VAR----------------------------------------------------------
+round(deviance(obj7, relative = FALSE), 2)
+summary(obj7, which = "variances")
 
 ## ----APSIMdat-----------------------------------------------------------------
 data(APSIMdat)
 head(APSIMdat)
 
 ## ----APSIMmodel---------------------------------------------------------------
-obj2 <- LMMsolve(biomass ~ 1,
-                 spline = ~spl1D(x = das, nseg = 200), 
+obj8 <- LMMsolve(fixed = biomass ~ 1,
+                 spline = ~spl1D(x = das, nseg = 50), 
                  data = APSIMdat)
 
 ## ----APSIMmodelSummary--------------------------------------------------------
-summary(obj2)
+summary(obj8)
 
 ## ----APSIMplot----------------------------------------------------------------
-plotDat2 <- obtainSmoothTrend(obj2, grid = 1000, includeIntercept = TRUE)
-
+das_range <- range(APSIMdat$das)
+newdat <- data.frame(das=seq(das_range[1], das_range[2], length = 300))
+pred8 <- predict(obj8, newdata = newdat, se.fit = TRUE)
 ggplot(data = APSIMdat, aes(x = das, y = biomass)) +
-  geom_point(size = 1.2) +
-  geom_line(data = plotDat2, aes(y = ypred), color = "red", linewidth = 1) +
-  geom_line(data = plotDat2, aes(y = ypred-2*se), col='blue', linewidth = 1) +
-  geom_line(data = plotDat2, aes(y = ypred+2*se), col='blue', linewidth = 1) +
-  labs(title = "APSIM biomass as function of time", 
+  geom_point(size = 1.0) +
+  geom_line(data = pred8, aes(y = ypred), color = "blue", linewidth = 1) +
+  geom_ribbon(data = pred8, aes(x = das,ymin = ypred-2*se, ymax = ypred+2*se),
+              alpha = 0.2, inherit.aes = FALSE) + 
+    labs(title = "APSIM biomass as function of time", 
        x = "days after sowing", y = "biomass (kg)") +
-  theme(panel.grid = element_blank())
+  theme_bw()
 
 ## ----APSIMDeriv---------------------------------------------------------------
-plotDatDt <- obtainSmoothTrend(obj2, grid = 1000, deriv = 1)
+plotDatDt <- obtainSmoothTrend(obj8, grid = 1000, deriv = 1)
 
 ggplot(data = plotDatDt, aes(x = das, y = ypred)) +
   geom_line(color = "red", linewidth = 1) +
   labs(title = "APSIM growth rate as function of time", 
        x = "days after sowing", y = "growth rate (kg/day)") +
-  theme(panel.grid = element_blank())
-
-## ----USprecip data------------------------------------------------------------
-## Get precipitation data from spam
-data(USprecip, package = "spam")
-
-## Only use observed data
-USprecip <- as.data.frame(USprecip)
-USprecip <- USprecip[USprecip$infill == 1, ]
-
-## ----runobj3------------------------------------------------------------------
-obj3 <- LMMsolve(fixed = anomaly ~ 1,
-                 spline = ~spl2D(x1 = lon, x2 = lat, nseg = c(41, 41)),
-                 data = USprecip)
-
-## ----ED_USprecip--------------------------------------------------------------
-summary(obj3)
-
-## ----Plot_USprecip------------------------------------------------------------
-plotDat3 <- obtainSmoothTrend(obj3, grid = c(200, 300), includeIntercept = TRUE)
-plotDat3 <- sf::st_as_sf(plotDat3, coords = c("lon", "lat"))
-usa <- sf::st_as_sf(maps::map("usa", regions = "main", plot = FALSE))
-sf::st_crs(usa) <- sf::st_crs(plotDat3)
-intersection <- sf::st_intersects(plotDat3, usa)
-plotDat3 <- plotDat3[!is.na(as.numeric(intersection)), ]
-
-ggplot(usa) + 
-  geom_sf(color = NA) +
-  geom_tile(data = plotDat3, 
-            mapping = aes(geometry = geometry, fill = ypred), 
-            linewidth = 0,
-            stat = "sf_coordinates") +
-  scale_fill_gradientn(colors = topo.colors(100))+
-  labs(title = "Precipitation (anomaly)", 
-       x = "Longitude", y = "Latitude") +
-  coord_sf() +
-  theme(panel.grid = element_blank())
-
-## ----newdataARG---------------------------------------------------------------
-## Predictions for new data, using city coordinates from maps package.
-data(us.cities, package = "maps")
-## Column names have to match column names used for fitting the model.
-colnames(us.cities)[colnames(us.cities) == "long"] <- "lon"
-## Select columns name, lat and lon
-us.cities <- us.cities[, c(1,4,5)]
-head(us.cities)
-
-pred3 <- obtainSmoothTrend(obj3, newdata = us.cities, includeIntercept = TRUE)
-head(pred3)
+  theme_bw()
 
 ## ----multipop-----------------------------------------------------------------
 ## Load data for multiparental population.
@@ -156,28 +348,28 @@ head(multipop)
 
 ## ----residualARG--------------------------------------------------------------
 ## Fit null model.
-obj4 <- LMMsolve(fixed = pheno ~ cross, 
+obj9 <- LMMsolve(fixed = pheno ~ cross, 
                  residual = ~cross, 
                  data = multipop)
-dev4 <- deviance(obj4)
+dev0 <- deviance(obj9, relative = FALSE)
 
 ## ----groupOPTION--------------------------------------------------------------
 ## Fit alternative model - include QTL with probabilities defined in columns 3:5 
 lGrp <- list(QTL = 3:5)
-obj5 <- LMMsolve(fixed = pheno ~ cross, 
+obj10 <- LMMsolve(fixed = pheno ~ cross, 
                  group = lGrp,
                  random = ~grp(QTL),
                  residual = ~cross,
                  data = multipop) 
-dev5 <- deviance(obj5)
+dev1 <- deviance(obj10, relative = FALSE)
 
 ## ----approxPvalue-------------------------------------------------------------
 ## Deviance difference between null and alternative model.
-dev <- dev4 - dev5
+dev <- dev0 - dev1
 ## Calculate approximate p-value. 
 minlog10p <- -log10(0.5 * pchisq(dev, 1, lower.tail = FALSE))
 round(minlog10p, 2)
 
 ## ----QTLeffects---------------------------------------------------------------
-coef(obj5)$QTL
+coef(obj10)$QTL
 

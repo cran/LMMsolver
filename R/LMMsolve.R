@@ -22,7 +22,8 @@
 #' @param random A formula for the random part of the model. Should be of the
 #' form "~ pred".
 #' @param spline A formula for the spline part of the model. Should be of the
-#' form "~ spl1D()", ~ spl2D()" or "~spl3D()".
+#' form "~ spl1D()", ~ spl2D()" or "~spl3D()". Generalized Additive Models (GAMs) can
+#' also be used, for example "~ spl1D() + spl2D()"
 #' @param group A named list where each component is a numeric vector
 #' specifying contiguous fields in data that are to be considered as a
 #' single term.
@@ -139,8 +140,9 @@ LMMsolve <- function(fixed,
     splSpec <- attr(splTrms, "specials")
     if (length(terms(splTrms)) != 2 ||
         ## Spline formula should consist of splxD() terms and nothing else.
-        length(splSpec[!sapply(X = splSpec, FUN = is.null)]) > 1 ||
-        length(unlist(splSpec)) != length(labels(terms(spline)))) {
+        length(unlist(splSpec)) != length(labels(terms(spline))) ||
+        length(splSpec$spl2D) > 1 ||
+        length(splSpec$spl3D) > 1) {
       stop(splErr)
     }
   }
@@ -160,6 +162,11 @@ LMMsolve <- function(fixed,
   }
   if (!is.numeric(maxit) || length(maxit) > 1 || maxit < 0) {
     stop("maxit should be a positive numerical value.")
+  }
+  if (!is.null(grpTheta) &&
+      (!is.numeric(grpTheta) || !isTRUE(all.equal(round(grpTheta),grpTheta)) ||
+       max(grpTheta) != length(unique(grpTheta)))) {
+    stop("grpTheta should be integers 1,2,...nGrp")
   }
   ## Check that all variables used in fixed formula are in data.
   data <- checkFormVars(fixed, data, naAllowed = FALSE)
@@ -372,6 +379,14 @@ LMMsolve <- function(fixed,
       term.labels.r <- c(term.labels.r, splRes$term.labels.r)
       scFactor <- c(scFactor, splRes$scaleFactor)
     }
+    # if splines of different dimensions are combined:
+    if (length(splSpec[!sapply(X = splSpec, FUN = is.null)]) > 1) {
+       #check whether variables are uniquely defined
+        nameVar <- unlist(lapply(splResList, function(z) {names(z$x)}))
+        if (length(nameVar)!=length(unique(nameVar))) {
+        stop("variables in splines should be unique.\n")
+      }
+    }
   }
 
   ## Convert to spam matrix and cleanup
@@ -431,6 +446,8 @@ LMMsolve <- function(fixed,
     obj <- sparseMixedModels(y = y, X = Xs, Z = Z, lGinv = lGinv, lRinv = lRinv,
                              tolerance = tolerance, trace = trace, maxit = maxit,
                              theta = theta, grpTheta = grpTheta)
+    dev.residuals <- family$dev.resids(y, obj$yhat, w)
+    deviance <- sum(dev.residuals)
   } else {
     ## MB, 23 jan 2023
     ## binomial needs global weights
@@ -466,7 +483,11 @@ LMMsolve <- function(fixed,
       if (trace) {
         cat("Generalized Linear Mixed Model iteration", i, ", tol=", tol, "\n")
       }
-      if (tol < tolerance) break;
+      if (tol < tolerance) {
+        dev.residuals <- family$dev.resids(y, mu, w)
+        deviance <- sum(dev.residuals)
+        break;
+      }
     }
   }
   ## Add names to ndx of coefficients.
@@ -551,5 +572,6 @@ LMMsolve <- function(fixed,
                         term.labels.r = term.labels.r,
                         splRes = splResList,
                         family = family,
+                        deviance = deviance,
                         trace = trace))
 }

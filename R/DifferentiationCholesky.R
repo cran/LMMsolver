@@ -38,7 +38,14 @@ ADchol <- function(lP) {
   opt <- summary(C)
   cholC <- chol(C, memory = list(nnzR = 8 * opt$nnz,
                                  nnzcolindices = 4 * opt$nnz))
-  L <- construct_ADchol_Rcpp(cholC, lP)
+  # reorder the matrices in list lP by double transpose, row-permutations are much faster
+  # than column permutations (see help permutation() function in spam library)
+  lQ <- lapply(lP, function(x) {
+    z <- x[cholC@pivot,]
+    tz <- spam::t(z)
+    tz <- tz[cholC@pivot,]
+    return(spam::t(tz)) })
+  L <- construct_ADchol_Rcpp(cholC, lQ)
   new("ADchol",
       supernodes = L$supernodes,
       rowpointers = L$rowpointers,
@@ -50,5 +57,4 @@ ADchol <- function(lP) {
       ADentries = L$ADentries,
       P = L$P)
 }
-
 

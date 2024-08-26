@@ -35,7 +35,6 @@ using namespace std;
 // [[Rcpp::export]]
 List construct_ADchol_Rcpp(Rcpp::S4 obj_spam,
                            const List& P_list) {
-  //Rcpp::S4 obj_spam(U);
   IntegerVector supernodes = GetIntVector(obj_spam, "supernodes", 0);
 
   // Exchange row and columns compared to spam object, as in Ng and Peyton 1993
@@ -65,28 +64,24 @@ List construct_ADchol_Rcpp(Rcpp::S4 obj_spam,
     NumericVector entries_P     = obj.slot("entries");
 
     vector<double> result(size, 0.0);
-    vector<double> z(N);
     for (int J=0; J<Nsupernodes;J++)
     {
-      int s = rowpointers[J];
       for (int j=supernodes[J]; j<supernodes[J+1]; j++)
       {
-        int r = pivot[j];
-        if (rowpointers_P[r] != rowpointers_P[r+1]) {
-          std::fill(z.begin(), z.end(), 0.0);
-          for (int ll=rowpointers_P[r];ll<rowpointers_P[r+1];ll++) {
-            int c = colindices_P[ll];
-            z[invpivot[c]] = entries_P[ll];
-          }
-
-          int k = s;
-          for (int ndx = colpointers[j]; ndx < colpointers[j+1]; ndx++)
+        int k = rowpointers[J+1]-1;   // start at end/bottom
+        int ndx = colpointers[j+1]-1; // start at end/bottom
+        for (int ll=rowpointers_P[j+1]-1;ll>=rowpointers_P[j];ll--)
+        {
+          int c = colindices_P[ll];
+          if (c < j) break;
+          while( rowindices[k] != c)
           {
-            int ii = rowindices[k++];
-            result[ndx] = z[ii];
+            k--;
+            ndx--;
           }
+          result[ndx] = entries_P[ll];
+          if (c == j) break;
         }
-        s++;
       }
     }
 
@@ -108,6 +103,7 @@ List construct_ADchol_Rcpp(Rcpp::S4 obj_spam,
   L["P"] = P_matrix;
   return L;
 }
+
 
 // j is current column in Supernode J
 void ADcmod1(NumericVector& F,

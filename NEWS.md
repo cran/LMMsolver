@@ -1,3 +1,15 @@
+# LMMsolver 1.0.8
+
+-   Vignette has been rewritten, with a new introduction section. 
+-   The function `predict.LMMsolve` added.
+-   Extension of gam models, combining different `splxD()` is possible now.   
+-   Correction of upper bound nominal effective dimension for large data sets.
+-   new 2D example Sea Surface Temperature added.
+-   Issue with product of two large matrices fixed. 
+-   Improved efficiency initialization for large datasets.
+-   Bug in `grpTheta` argument of `LMMsolve()` fixed. 
+-   Deviance function changes, with extra argument `relative`, giving the relative conditional deviance as defined in McCullagh and Nelder. The default is `relative=TRUE`, for `relative=FALSE` it returns `-2*logLik(obj)`
+
 # LMMsolver 1.0.7
 
 -   Improved efficiency for models where the `residual` argument of `LMMsolve()` is used.

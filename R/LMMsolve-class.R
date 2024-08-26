@@ -32,6 +32,7 @@
 #' \item{term.labels.f}{The names of the fixed terms in the mixed model}
 #' \item{term.labels.r}{The names of the random terms in the mixed model}
 #' \item{splRes}{An object with definition of spline argument}
+#' \item{deviance}{The relative deviance}
 #' \item{family}{An object of class family specifying the distribution and link function}
 #' \item{trace}{A data.frame with the convergence sequence for the log likelihood and effective dimensions}.
 #'
@@ -65,6 +66,7 @@ LMMsolveObject <- function(logL,
                            term.labels.r,
                            splRes,
                            family,
+                           deviance,
                            trace) {
   structure(list(logL = logL,
                  sigma2e = sigma2e,
@@ -92,6 +94,7 @@ LMMsolveObject <- function(logL,
                  term.labels.r = term.labels.r,
                  splRes = splRes,
                  family = family,
+                 deviance = deviance,
                  trace = trace),
             class = c("LMMsolve", "list"))
 }
@@ -204,6 +207,11 @@ coef.LMMsolve <- function(object,
                           ...) {
   u <- object$coefMME
   cf <- object$ndxCoefficients
+
+  ## remove termType attribute, only needed for predict function
+  cf <- lapply(cf, function(x) { attr(x,which="termType") <- NULL
+                                 return(x) })
+
   ## if not standard errors.
   if (!se) {
     coef <- lapply(X = cf, FUN = function(x) {
@@ -324,6 +332,8 @@ logLik.LMMsolve <- function(object,
 #' Obtain the deviance of a model fitted using LMMsolve.
 #'
 #' @inheritParams logLik.LMMsolve
+#' @param relative Deviance relative conditional or absolute unconditional
+#' (-2*logLik(object))? Default \code{relative = TRUE}.
 #'
 #' @return The deviance of the fitted model.
 #'
@@ -336,15 +346,17 @@ logLik.LMMsolve <- function(object,
 #'                 data = john.alpha)
 #'
 #' ## Obtain deviance.
-#' logLik(LMM1)
-#'
-#' ## Obtain deviance. without constant.
-#' logLik(LMM1, includeConstant = FALSE)
+#' deviance(LMM1)
 #'
 #' @export
 deviance.LMMsolve <- function(object,
+                              relative = TRUE,
                               includeConstant = TRUE,
                               ...) {
+  if (relative) {
+    return(object$deviance)
+  }
+  # else
   logL <- logLik(object, includeConstant = includeConstant)
   dev <- -2 * logL
   return(dev)
@@ -413,6 +425,134 @@ diagnosticsMME <- function(object) {
   cat("\n Summary of cholesky decomposition of C \n")
   print(spam::summary.spam(chol(object$C)))
 }
+
+#' Predict function
+#'
+#' @param object an object of class LMMsolve.
+#' @param ... Unused.
+#' @param newdata A data.frame containing new points for which the smooth
+#' trend should be computed. Column names should include the names used when
+#' fitting the spline model.
+#' @param se.fit calculate standard errors, default \code{FALSE}.
+#'
+#' @return A data.frame with predictions for the smooth trend on the specified
+#' grid. The standard errors are saved if `se.fit=TRUE`.
+#'
+#' @export
+predict.LMMsolve <- function(object,
+                             ...,
+                             newdata,
+                             se.fit = FALSE) {
+  if (!inherits(object, "LMMsolve")) {
+    stop("object should be an object of class LMMsolve.\n")
+  }
+  #if (is.null(object$splRes)) {
+  #  stop("The model was fitted without a spline component.\n")
+  #}
+  if (!inherits(newdata, "data.frame")) {
+    stop("newdata should be a data.frame.\n")
+  }
+
+  varNames <- unlist(sapply(object$splRes,function(z){names(z$x)}))
+  colNames <- colnames(newdata)
+  Missing <- !(varNames %in% colNames)
+  if (sum(Missing) > 0) {
+    missingVar <- paste(varNames[Missing], collapse=",")
+    str <- paste0("variables (", missingVar, ") in data.frame newdata missing.\n")
+    stop(str)
+  }
+
+  # some items not implemented yet
+  #s1 <-sum(sapply(obj2$ndxCoefficients,
+  #                 function(x) {attr(x,which="termType") == "factor"}))
+  #if (s1 > 0) stop("predict function for factors not implemented yet")
+  s2 <-sum(sapply(object$ndxCoefficients,
+                   function(x) {attr(x,which="termType") == "grp"}))
+  if (s2 > 0) stop("predict function for grp() not implemented yet")
+
+  splFixLab <- sapply(object$splRes, function(x) { x$term.labels.f })
+  splRanLab <- sapply(object$splRes, function(x) { x$term.labels.r })
+
+  nGam <- length(object$splRes)
+  xGrid <- list()
+  BxTot <- list()
+  XTot <- list()
+  for (s in seq_len(nGam)) {
+    spl <- object$splRes[[s]]
+    x <- spl$x
+    xGrid[[s]] <- lapply(X = seq_along(x), FUN = function(i) {
+      newdata[[names(x)[i]]]})
+
+    Bx <- mapply(FUN = Bsplines, spl$knots, xGrid[[s]], deriv=0)
+    BxTot[[s]] <- Reduce(RowKronecker, Bx)
+    G <- lapply(X=spl$knots, FUN = function(x) {
+      constructG(knots = x, scaleX = spl$scaleX, pord = spl$pord)})
+    ## Compute G over all dimensions
+    GTot <- Reduce('%x%', G)
+    ## no scaling for first column of GTot
+    GTot[,1] <- 1
+    X <- BxTot[[s]] %*% GTot
+    ## Remove intercept (needed when fitting model to avoid singularities).
+    XTot[[s]] <- removeIntercept(X)
+  }
+  dim <- object$dim
+  lU <- list()
+  nRow <- nrow(newdata)
+  for (i in seq_along(dim)) {
+    lU[[i]] = spam::spam(x = 0, nrow = nRow, ncol = dim[i])
+  }
+  # intercept:
+  lU[[1]] = spam::spam(x = 1, nrow = nRow, ncol = 1)
+
+  labels <- c(object$term.labels.f, object$term.labels.r)
+
+  for (s in seq_len(nGam)) {
+    spl <- object$splRes[[s]]
+    ndx.f <- which(spl$term.labels.f == labels)
+    ndx.r <- which(spl$term.labels.r == labels)
+    lU[[ndx.f]] <- XTot[[s]]
+    lU[[ndx.r]] <- BxTot[[s]]
+  }
+  U <- Reduce(spam::cbind.spam, lU)
+
+  tmp <- object$term.labels.f[-1]
+  fixTerms <- setdiff(tmp, splFixLab)
+
+  nFixTerms <- length(fixTerms)
+  if (nFixTerms > 0) {
+    colNames <- colnames(newdata)
+    Missing <- !(fixTerms %in% colNames)
+    if (sum(Missing) > 0) {
+      missingVar <- paste(fixTerms[Missing], collapse=",")
+      str <- paste0("variables (", missingVar, ") in data.frame newdata missing.\n")
+      stop(str)
+    }
+    for (i in seq_len(nFixTerms)) {
+      U <- U + makeDesignTerm(object, newdata, fixTerms[i])
+    }
+  }
+
+  outDat <- newdata
+
+  ranTerms <- setdiff(object$term.labels.r, splRanLab)
+  nRanTerms <- length(ranTerms)
+  for (i in seq_len(nRanTerms)) {
+    term <- ranTerms[[i]]
+    outDat[[term]] <- rep("Excluded",nRow)
+  }
+
+  eta <- as.vector(U %*% object$coefMME)
+  family <- object$family
+  familyPred <- family$linkinv(eta)
+
+  outDat[["ypred"]] <- familyPred
+  if (se.fit) {
+    outDat[["se"]] <- calcStandardErrors(C = object$C, D = U)*abs(family$mu.eta(eta))
+  }
+
+  return(outDat)
+}
+
 
 
 
