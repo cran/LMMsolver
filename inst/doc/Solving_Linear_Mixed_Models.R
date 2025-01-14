@@ -72,36 +72,6 @@ ggplot(data = dat2, aes(x = x, y = y)) +
               alpha=0.2, inherit.aes = FALSE) +
   theme_bw() 
 
-## ----poissonSim---------------------------------------------------------------
-set.seed(1234)
-n <- 150
-x <- seq(0, 1, length=n)
-fun_lambda <- function(x) { 4 + 3*x + 4*sin(7*x) }
-x <- seq(0, 1, length = n)
-y <- rpois(n = n, lambda = fun_lambda(x)) 
-dat3 <- data.frame(x = x, y = y)
-
-## ----Poisson_LMMsolver--------------------------------------------------------
-obj3 <- LMMsolve(fixed = y ~ 1, 
-                spline = ~spl1D(x, nseg = 50), 
-                family = poisson(), 
-                data = dat3)
-summary(obj3)
-
-## ----predict_poisson----------------------------------------------------------
-newdat <- data.frame(x = seq(0, 1, length = 300))
-pred3 <- predict(obj3, newdata = newdat, se.fit = TRUE)
-pred3$y_true <- fun_lambda(pred3$x)
-
-ggplot(data = dat3, aes(x = x, y = y)) +
-  geom_point(col = "black", size = 1.5) +
-  geom_line(data = pred3, aes(y = y_true), color = "red", 
-            linewidth = 1, linetype ="dashed") +
-  geom_line(data = pred3, aes(y = ypred), color = "blue", linewidth = 1) +
-  geom_ribbon(data= pred3, aes(x=x, ymin = ypred-2*se, ymax = ypred+2*se),
-              alpha=0.2, inherit.aes = FALSE) +
-  theme_bw() 
-
 ## ----twoExperiments-----------------------------------------------------------
 set.seed(1234)
 nA <-  50
@@ -125,7 +95,7 @@ ggplot(dat4, aes(x = Experiment, y = y, fill = Experiment)) +
 
 ## ----twoExpSolve--------------------------------------------------------------
 obj4 <- LMMsolve(fixed= y ~ 1, 
-                 spline = ~spl1D(x, nseg = 50),
+                 spline = ~spl1D(x, nseg = 50, xlim = c(0,1)),
                  random = ~Experiment,
                  residual = ~Experiment,
                  data = dat4)
@@ -279,6 +249,130 @@ ggplot(pred_test, aes(x = sst,y = ypred)) + geom_point() +
 Y <- (pred_test$sst - pred_test$ypred)^2
 RMSE <- sqrt(mean(Y))
 round(RMSE, 2)
+
+## ----poissonSim---------------------------------------------------------------
+set.seed(1234)
+n <- 150
+x <- seq(0, 1, length=n)
+fun_lambda <- function(x) { 4 + 3*x + 4*sin(7*x) }
+x <- seq(0, 1, length = n)
+y <- rpois(n = n, lambda = fun_lambda(x)) 
+dat3 <- data.frame(x = x, y = y)
+
+## ----Poisson_LMMsolver--------------------------------------------------------
+obj3 <- LMMsolve(fixed = y ~ 1, 
+                spline = ~spl1D(x, nseg = 50), 
+                family = poisson(), 
+                data = dat3)
+summary(obj3)
+
+## ----predict_poisson----------------------------------------------------------
+newdat <- data.frame(x = seq(0, 1, length = 300))
+pred3 <- predict(obj3, newdata = newdat, se.fit = TRUE)
+pred3$y_true <- fun_lambda(pred3$x)
+
+ggplot(data = dat3, aes(x = x, y = y)) +
+  geom_point(col = "black", size = 1.5) +
+  geom_line(data = pred3, aes(y = y_true), color = "red", 
+            linewidth = 1, linetype ="dashed") +
+  geom_line(data = pred3, aes(y = ypred), color = "blue", linewidth = 1) +
+  geom_ribbon(data= pred3, aes(x=x, ymin = ypred-2*se, ymax = ypred+2*se),
+              alpha=0.2, inherit.aes = FALSE) +
+  theme_bw() 
+
+## ----binomial_sim-------------------------------------------------------------
+set.seed(1234)
+n <- 100
+sz <- 10
+
+fun_prob <- function(x) { 0.5 + 0.4*sin(2*pi*x) }
+
+x <- seq(0, 1, length=n)
+nsucces <- sapply(x, FUN=function(x) {
+                  rbinom(n=1, size = sz, prob = fun_prob(x))
+                })
+dat <- data.frame(x = x, succes = nsucces, 
+                         failure= sz - nsucces)
+head(dat, 5)
+
+## ----binomial_solve-----------------------------------------------------------
+obj3 <- LMMsolve(fixed = cbind(succes, failure) ~ 1,
+                 spline = ~spl1D(x, nseg = 50),
+                 family = binomial(),
+                 data = dat)
+summary(obj3)
+
+## ----binomial_predict---------------------------------------------------------
+newdat <- data.frame(x = seq(0, 1, by=0.01))
+pred3 <- predict(obj3, newdata = newdat, se.fit=TRUE)
+
+## ----binomial_plot------------------------------------------------------------
+pred3$y_true <- fun_prob(pred3$x)
+dat$y <- dat$succes/sz
+
+ggplot(data = dat, aes(x = x, y = y)) +
+  geom_point(col = "black", size = 1.5) +
+  geom_line(data = pred3, aes(y = y_true), color = "red",
+            linewidth = 1, linetype = "dashed") +
+  geom_line(data = pred3, aes(y = ypred), color = "blue", linewidth = 1) +
+  geom_ribbon(data= pred3, aes(x=x, ymin = ypred-2*se, ymax = ypred+2*se),
+              alpha=0.2, inherit.aes = FALSE) +
+  theme_bw()
+
+## ----multinomialmodel---------------------------------------------------------
+k <- 4
+mu <- c(0.1, 0.4, 0.6, 0.9)
+names(mu) <- LETTERS[1:k]
+
+nonlinear <- function(x, mu) {
+  z <- sapply(mu, function(mu) { exp(-8*sin(pi*(x-mu))^2)})
+  # normalize to sum equal to one
+  z <- z/sum(z)
+  return(z)
+}
+
+## ----simMultinomial-----------------------------------------------------------
+x <- runif(n, 0, 1)   
+sz <- 10 
+multiNom <- t(sapply(x, FUN=
+                      function(x) {
+                        rmultinom(n=1, size=sz, prob = nonlinear(x,mu))
+                      } ))
+colnames(multiNom) <- names(mu)
+dat <- data.frame(x, multiNom)
+head(dat, 4)
+
+## ----multinomialfit-----------------------------------------------------------
+obj <- LMMsolve(fixed = cbind(A,B,C,D) ~ 1,
+                spline = ~spl1D(x, nseg = 17, xlim = c(0,1)),
+                data = dat, 
+                family = multinomial())
+summary(obj)
+
+## ----makePredictions----------------------------------------------------------
+sRows <- rowSums(multiNom)
+fr <- multiNom/sRows
+dat_fr <- data.frame(x, fr)
+
+x0 <- seq(0, 1, by = 0.01)
+newdat <- data.frame(x = x0)
+pred <- predict(obj, newdata = newdat)
+head(pred)
+
+## ----makePlot-----------------------------------------------------------------
+library(tidyr)
+colnames(pred) <- c("x", "category", "y")
+prob_true <- t(sapply(X=x0, FUN = function(x) { nonlinear(x, mu)}))
+colnames(prob_true) <- names(mu)
+df_true <- data.frame(x = x0, prob_true)
+prob_true_lf <- df_true %>% gather(key = "category",value="y", A:D)
+dat_fr_lf <- dat_fr %>% gather(key = "category",value="y", A:D)
+p1 <- ggplot(prob_true_lf, aes(x = x, y=y, color = category)) +
+  geom_line(linetype='dashed') +
+  geom_line(data=pred) +
+  geom_point(data=dat_fr_lf)
+p1
+
 
 ## ----oatsdata-----------------------------------------------------------------
 ## Load data.

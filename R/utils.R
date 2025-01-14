@@ -2,7 +2,7 @@
 #'
 #' @param x a numerical vector.
 #'
-#' @return norm of vector x
+#' @returns norm of vector x
 #'
 #' @noRd
 #' @keywords internal
@@ -17,7 +17,7 @@ normVec <- function(x) {
 #'                                     [0  0]
 #' and              lGinv2 extended to [0  0]
 #'                                     [0 A2]
-#' @return a list of sparse matrices of dimension (d1+d2) x (d1+d2)
+#' @returns a list of sparse matrices of dimension (d1+d2) x (d1+d2)
 #'
 #' @param lGinv1 a list of sparse matrices.
 #' @param lGinv2 a list of sparse matrices.
@@ -71,7 +71,7 @@ calcScaleFactor <- function(knots,
 #' @param pord order of the penalty.
 #' @param dx distance between the knots.
 #'
-#' @return qxq penalty matrix of class spam
+#' @returns qxq penalty matrix of class spam
 #'
 #' @noRd
 #' @keywords internal
@@ -128,7 +128,7 @@ constructG <- function(knots,
 #' @param knots knot positions of B-spline basis.
 #' @param pord order of the penalty matrix (pord=1 or 2).
 #'
-#' @return a q x q matrix of type spam
+#' @returns a q x q matrix of type spam
 #'
 #' @noRd
 #' @keywords internal
@@ -154,7 +154,7 @@ constructCCt <- function(knots,
 #' @param knots list with knot positions for each dimension
 #' @param pord order of the penalty matrix (1 or 2).
 #'
-#' @return a list of symmetric matrices of length of vector q.
+#' @returns a list of symmetric matrices of length of vector q.
 #'
 #' @noRd
 #' @keywords internal
@@ -187,7 +187,7 @@ constructGinvSplines <- function(q,
 #'
 #' @param X design matrix.
 #'
-#' @return a matrix if \code{X} has more than one column, otherwise return NULL
+#' @returns a matrix if \code{X} has more than one column, otherwise return NULL
 #'
 #' @noRd
 #' @keywords internal
@@ -575,14 +575,65 @@ makeDesignTerm <- function(obj, newdat, term) {
   } else if (type == "variable") {
     v <- newdat[[term]]
     ndx <- as.numeric(coefI)
-    l <- list(i=1:length(v), j=rep(ndx,length(v)), v=v)
-    M <- spam::spam(l, nrow=length(v), ncol=nrow(obj$C))
+    l <- list(i = seq_len(length(ndx)*length(v)),
+              j = rep(ndx, times = length(v)),
+              v = rep(v, each = length(ndx)))
+    #l <- list(i=1:length(v), j=rep(ndx,length(v)), v=v)
+    M <- spam::spam(l, nrow=length(ndx)*length(v), ncol=nrow(obj$C))
 
   } else {
     str <- paste("Make predictions for type", type, "not implemented yet\n" )
     stop(str)
   }
   return(M)
+}
+
+chkValBsplines <- function(spl, newdata) {
+  x <- spl$x
+  for (ii in seq_along(x)) {
+    tmp <- newdata[[names(x)[ii]]]
+    vname <- names(x)[ii]
+    if (!is.numeric(tmp)) {
+      msg <- paste("Variable", vname, "should be numeric\n")
+      stop(msg)
+    }
+    if (sum(is.na(tmp)) > 0) {
+      msg <- paste("Variable", vname, "has missing values\n")
+      stop(msg)
+    }
+    xminB <- attr(spl$knots[[ii]], which="xmin")
+    xmaxB <- attr(spl$knots[[ii]], which="xmax")
+    if (min(tmp) < xminB || max(tmp) > xmaxB) {
+      msg <- paste("Variable", vname,
+                   "outside range of B-splines basis\n")
+      stop(msg)
+    }
+  }
+}
+
+checkMultiResponse <- function(YY, family) {
+  if (!inherits(YY, "matrix")) {
+    str <- paste("family", family$family, ": response should be a matrix.")
+    stop(str)
+  }
+  if (ncol(YY) == 2 && family$family == "multinomial") {
+    str <- paste("family", family$family, "two categories, use binomial family.")
+    stop(str)
+  }
+  if (ncol(YY) != 2 && family$family %in% c("binomial", "quasibinomial")) {
+    str <- paste("family", family$family, ": response should have two columns.")
+    stop(str)
+  }
+  if (any(is.na(YY))) {
+    str <- paste("family", family$family,
+                 ": NA's in response variable.")
+    stop(str)
+  }
+  if (any(YY<0)) {
+    str <- paste("family", family$family,
+                 ": negative values in response variable.")
+    stop(str)
+  }
 }
 
 

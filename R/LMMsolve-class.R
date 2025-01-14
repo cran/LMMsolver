@@ -5,7 +5,7 @@
 #' methods for the generic functions coef, fitted, residuals, loglik and
 #' deviance.
 #'
-#' @return
+#' @returns
 #' An object of class \code{LMMsolve} contains the following components:
 #' \item{logL}{The restricted log-likelihood at convergence}
 #' \item{sigma2e}{The residual error}
@@ -31,6 +31,7 @@
 #' mixed model}
 #' \item{term.labels.f}{The names of the fixed terms in the mixed model}
 #' \item{term.labels.r}{The names of the random terms in the mixed model}
+#' \item{respVar}{The name(s) of the response variable(s).}
 #' \item{splRes}{An object with definition of spline argument}
 #' \item{deviance}{The relative deviance}
 #' \item{family}{An object of class family specifying the distribution and link function}
@@ -64,6 +65,7 @@ LMMsolveObject <- function(logL,
                            Nres,
                            term.labels.f,
                            term.labels.r,
+                           respVar,
                            splRes,
                            family,
                            deviance,
@@ -92,6 +94,7 @@ LMMsolveObject <- function(logL,
                  Nres = Nres,
                  term.labels.f = term.labels.f,
                  term.labels.r = term.labels.r,
+                 respVar = respVar,
                  splRes = splRes,
                  family = family,
                  deviance = deviance,
@@ -111,7 +114,7 @@ LMMsolveObject <- function(logL,
 #' @param \dots Some methods for this generic require additional arguments.
 #' None are used in this method.
 #'
-#' @return A data.frame with either effective dimensions or variances depending
+#' @returns A data.frame with either effective dimensions or variances depending
 #' on which.
 #'
 #' @examples
@@ -181,7 +184,7 @@ print.summary.LMMsolve <- function(x,
 #' @param \dots some methods for this generic require additional arguments.
 #' None are used in this method.
 #'
-#' @return A list of vectors, containing the estimated effects for each fixed
+#' @returns A list of vectors, containing the estimated effects for each fixed
 #' effect and the predictions for each random effect in the defined linear
 #' mixed model.
 #'
@@ -244,7 +247,7 @@ coef.LMMsolve <- function(object,
 #'
 #' @inheritParams coef.LMMsolve
 #'
-#' @return A vector of fitted values.
+#' @returns A vector of fitted values.
 #'
 #' @examples
 #' ## Fit model on john.alpha data from agridat package.
@@ -269,7 +272,7 @@ fitted.LMMsolve <- function(object,
 #'
 #' @inheritParams coef.LMMsolve
 #'
-#' @return A vector of residuals.
+#' @returns A vector of residuals.
 #'
 #' @examples
 #' ## Fit model on john.alpha data from agridat package.
@@ -298,7 +301,7 @@ residuals.LMMsolve <- function(object,
 #' be included. Default is \code{TRUE}, as for example in \code{lme4} and SAS.
 #' In \code{asreml} the constant is omitted.
 #'
-#' @return The restricted maximum log-likelihood of the fitted model.
+#' @returns The restricted maximum log-likelihood of the fitted model.
 #'
 #' @examples
 #' ## Fit model on john.alpha data from agridat package.
@@ -335,7 +338,7 @@ logLik.LMMsolve <- function(object,
 #' @param relative Deviance relative conditional or absolute unconditional
 #' (-2*logLik(object))? Default \code{relative = TRUE}.
 #'
-#' @return The deviance of the fitted model.
+#' @returns The deviance of the fitted model.
 #'
 #' @examples
 #' ## Fit model on john.alpha data from agridat package.
@@ -362,70 +365,6 @@ deviance.LMMsolve <- function(object,
   return(dev)
 }
 
-#' Display the sparseness of the mixed model coefficient matrix
-#'
-#' @param object an object of class LMMsolve.
-#' @param cholesky Should the cholesky decomposition of the coefficient matrix
-#' be plotted?
-#'
-#' @return A plot of the sparseness of the mixed model coefficient matrix.
-#'
-#' @examples
-#' ## Fit model on john.alpha data from agridat package.
-#' data(john.alpha, package = "agridat")
-#'
-#' ## Fit simple model with only fixed effects.
-#' LMM1 <- LMMsolve(fixed = yield ~ rep + gen,
-#'                 data = john.alpha)
-#'
-#' ## Obtain deviance.
-#' displayMME(LMM1)
-#'
-#' @export
-displayMME <- function(object,
-                       cholesky = FALSE) {
-  if (!inherits(object, "LMMsolve")) {
-    stop("object should be an object of class LMMsolve.\n")
-  }
-  if (!cholesky) {
-    spam::display(object$C)
-  } else {
-    cholC <- chol(object$C)
-    L <- t(spam::as.spam(cholC))
-    spam::display(L)
-  }
-}
-
-#' Give diagnostics for mixed model coefficient matrix C and the cholesky
-#' decomposition
-#'
-#' @param object an object of class LMMsolve.
-#'
-#' @return A summary of the mixed model coefficient matrix and its choleski
-#' decomposition.
-#'
-#' @examples
-#' ## Fit model on john.alpha data from agridat package.
-#' data(john.alpha, package = "agridat")
-#'
-#' ## Fit simple model with only fixed effects.
-#' LMM1 <- LMMsolve(fixed = yield ~ rep + gen,
-#'                 data = john.alpha)
-#'
-#' ## Obtain deviance.
-#' diagnosticsMME(LMM1)
-#'
-#' @export
-diagnosticsMME <- function(object) {
-  if (!inherits(object, "LMMsolve")) {
-    stop("object should be an object of class LMMsolve.\n")
-  }
-  cat("Summary of matrix C \n")
-  print(spam::summary.spam(object$C))
-  cat("\n Summary of cholesky decomposition of C \n")
-  print(spam::summary.spam(chol(object$C)))
-}
-
 #' Predict function
 #'
 #' @param object an object of class LMMsolve.
@@ -435,8 +374,27 @@ diagnosticsMME <- function(object) {
 #' fitting the spline model.
 #' @param se.fit calculate standard errors, default \code{FALSE}.
 #'
-#' @return A data.frame with predictions for the smooth trend on the specified
+#' @returns A data.frame with predictions for the smooth trend on the specified
 #' grid. The standard errors are saved if `se.fit=TRUE`.
+#'
+#' @examples
+#' ## simulate some data
+#' f <- function(x) { 0.3 + 0.4*x + 0.2*sin(20*x) }
+#' set.seed(12)
+#' n <- 150
+#' x <- seq(0, 1, length = n)
+#' sigma2e <- 0.04
+#' y <- f(x) + rnorm(n, sd = sqrt(sigma2e))
+#' dat <- data.frame(x, y)
+#'
+#' ## fit the model
+#' obj <- LMMsolve(fixed = y ~ 1,
+#'          spline = ~spl1D(x, nseg = 50), data = dat)
+#'
+#' ## make predictions on a grid
+#' newdat <- data.frame(x = seq(0, 1, length = 300))
+#' pred <- predict(obj, newdata = newdat, se.fit = TRUE)
+#' head(pred)
 #'
 #' @export
 predict.LMMsolve <- function(object,
@@ -451,6 +409,17 @@ predict.LMMsolve <- function(object,
   #}
   if (!inherits(newdata, "data.frame")) {
     stop("newdata should be a data.frame.\n")
+  }
+  family <- object$family
+  if (family$family == "multinomial") {
+    if (se.fit) {
+      stop("se.fit=TRUE not implemented yet for multinomial.\n")
+    }
+    ndxCf <- object$ndxCoefficients
+    IsFactor <- sapply(ndxCf, FUN=function(x) {return(attr(x,"termType")=="factor")})
+    if (any(IsFactor)) {
+      stop("use of factors not implemented yet for multinomial.\n")
+    }
   }
 
   varNames <- unlist(sapply(object$splRes,function(z){names(z$x)}))
@@ -479,10 +448,11 @@ predict.LMMsolve <- function(object,
   XTot <- list()
   for (s in seq_len(nGam)) {
     spl <- object$splRes[[s]]
+    ## check whether the values are in range Bsplines
+    chkValBsplines(spl, newdata)
     x <- spl$x
     xGrid[[s]] <- lapply(X = seq_along(x), FUN = function(i) {
       newdata[[names(x)[i]]]})
-
     Bx <- mapply(FUN = Bsplines, spl$knots, xGrid[[s]], deriv=0)
     BxTot[[s]] <- Reduce(RowKronecker, Bx)
     G <- lapply(X=spl$knots, FUN = function(x) {
@@ -498,8 +468,14 @@ predict.LMMsolve <- function(object,
   dim <- object$dim
   lU <- list()
   nRow <- nrow(newdata)
+  if (family$family == "multinomial") {
+    nCat <- length(object$respVar) - 1
+  } else {
+    nCat <- 1
+  }
+
   for (i in seq_along(dim)) {
-    lU[[i]] = spam::spam(x = 0, nrow = nRow, ncol = dim[i])
+    lU[[i]] = spam::spam(x = 0, nrow = nRow, ncol = dim[i]/nCat)
   }
   # intercept:
   lU[[1]] = spam::spam(x = 1, nrow = nRow, ncol = 1)
@@ -514,6 +490,9 @@ predict.LMMsolve <- function(object,
     lU[[ndx.r]] <- BxTot[[s]]
   }
   U <- Reduce(spam::cbind.spam, lU)
+  if (family$family == "multinomial") {
+    U <- U %x% spam::diag.spam(nCat)
+  }
 
   tmp <- object$term.labels.f[-1]
   fixTerms <- setdiff(tmp, splFixLab)
@@ -540,10 +519,25 @@ predict.LMMsolve <- function(object,
     term <- ranTerms[[i]]
     outDat[[term]] <- rep("Excluded",nRow)
   }
-
-  eta <- as.vector(U %*% object$coefMME)
-  family <- object$family
-  familyPred <- family$linkinv(eta)
+  if (family$family == "multinomial") {
+    eta0 <- as.vector(U %*% object$coefMME)
+    etaM <- matrix(data=eta0,nrow = nRow, ncol= nCat, byrow=TRUE)
+    pi_est <- t(apply(etaM, MARGIN=1, FUN = family$linkinv)) # linkinv
+    pi_est <- cbind(pi_est, 1.0 - rowSums(pi_est))
+    colnames(pi_est) <- object$respVar
+    tmp <- NULL
+    for (i in seq_along(object$respVar)) {
+      tmp2 <- data.frame(outDat, category = object$respVar[i])
+      tmp <- rbind(tmp, tmp2)
+    }
+    outDat <- tmp
+    outDat[["category"]] <- as.factor(rep(object$respVar, each = nRow))
+    familyPred <- as.vector(pi_est)
+  } else {
+    eta <- as.vector(U %*% object$coefMME)
+    family <- object$family
+    familyPred <- family$linkinv(eta)
+  }
 
   outDat[["ypred"]] <- familyPred
   if (se.fit) {
