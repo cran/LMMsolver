@@ -57,6 +57,10 @@ calcScaleFactor <- function(knots,
   dx <- sapply(X = knots, FUN = attr, which = "dx")
   sc <- (1 / dx)^(2 * pord - 1)
   sc <- ifelse(sc < 1e-10, 1e-10, sc)
+
+  # no scaling for cyclic
+  cyclic <- sapply(X = knots, FUN = attr, which = "cyclic")
+  sc <- ifelse(cyclic, 1.0, sc)
   return(sc)
 }
 
@@ -95,38 +99,97 @@ GrevillePoints <- function(knots) {
   sapply(X = c(1:q), FUN = function(j) { sum(knots[(j+1):(j+d)]) / d })
 }
 
+#' calc Marsden coefficients in a recursive way,
+#' see Tom Lyche et al.
+#' @noRd
+#' @keywords internal
+calcMarsden <- function(xmin, xmax, deg, nseg, x, k)
+{
+  q <- nseg+deg
+  if (k == 0) {
+    return(rep(1,q))
+  }
+  xiRec <- calcMarsden(xmin, xmax, deg-1, nseg, x, k-1)
+  knots <- PsplinesKnots(xmin, xmax, degree=deg, nseg=nseg)
+  Bx <- Bsplines(knots, x)
+  h <- attr(knots, which="dx")
+  D <- diff(diag(q), diff=1)
+  M <- as.matrix(rbind((1/h)*D, Bx))
+  b <- c(k*xiRec, x^k)
+  xi <- solve(M, b)
+  xi
+}
+
+
+# this can be integrated with constructG
+fixedpartCircle <- function(knots)
+{
+  # define null - space
+  degree <- attr(knots, "degree")
+  nseg <- length(knots) - 2*degree - 1
+  z <- c(0:(nseg-1))/nseg
+  u1 <- sin(2*pi*z)
+  u2 <- cos(2*pi*z)
+
+  cB0 <- Bsplines(knots, x=z)
+  v1 <- solve(as.matrix(cB0), u1)
+  v2 <- solve(as.matrix(cB0), u2)
+  # make sure small values equal to zero:
+  v1 <- ifelse(abs(v1) < .Machine$double.eps*10, 0, v1)
+  v2 <- ifelse(abs(v2) < .Machine$double.eps*10, 0, v2)
+  v <- cbind(1, v1, v2)
+  v
+}
+
 #' Construct G, such that BG = X
 #'
 #' @noRd
 #' @keywords internal
 constructG <- function(knots,
-                       scaleX,
-                       pord) {
-  if (pord == 2) {
-    xi <- GrevillePoints(knots)
-    G <- cbind(1, xi)
+                           scaleX,
+                           pord) {
+  cyclic <- attr(knots, which = "cyclic")
+  if (!cyclic) {
+    degr <- attr(knots,"degree")
+    nKnots <- length(knots)
+    nseg <- nKnots - 2*degr - 1
+    q <- nseg + degr
     if (scaleX) {
-      q <- length(xi)
+      ## MB, 1 febr 2025: we calculate here the original scaling as
+      ## used in previous version
+      xi <- GrevillePoints(knots)
       xi_mn <- mean(xi)
       alpha <- normVec(xi-xi_mn)
-      K <- matrix(data=c(1/sqrt(q),0,-xi_mn/alpha,1/alpha),nrow=2,ncol=2)
-      G <- G %*% K
+      xi_sc <- (xi-xi_mn)/alpha
+      h <- xi_sc[2] - xi_sc[1]
+      nKnots <- length(knots)
+      xmax <-  ((nKnots-1)/2)*h-degr*h
+      xmin <- -xmax
+      knots <- PsplinesKnots(xmin=xmin, xmax=xmax, degree=degr, nseg=nseg)
     }
-  } else { # pord==1
-    d <- attr(knots,"degree")
-    q <- length(knots) - (d + 1)
-    G <- matrix(data=1, nrow=q, ncol=1)
-    if (scaleX) {
-      G <- (1/sqrt(q))*G
+    xmin <- attr(knots,"xmin")
+    xmax <- attr(knots,"xmax")
+    xmid <- 0.5*(xmin + xmax)
+    G <- NULL
+    for (k in 0:(pord-1)) {
+      xi <- calcMarsden(xmin = xmin,xmax = xmax,deg = degr,nseg = nseg,x = xmid, k = k)
+      G <- cbind(G, xi)
     }
+  } else {
+    G <- fixedpartCircle(knots)
   }
+  if (scaleX) {
+    q <- nrow(G)
+    G[,1] <- G[,1]/sqrt(q)
+  }
+  dimnames(G) <- NULL
   return(G)
 }
 
 #' Construct constraint matrix
 #'
 #' @param knots knot positions of B-spline basis.
-#' @param pord order of the penalty matrix (pord=1 or 2).
+#' @param pord order of the penalty matrix
 #'
 #' @returns a q x q matrix of type spam
 #'
@@ -134,16 +197,21 @@ constructG <- function(knots,
 #' @keywords internal
 constructCCt <- function(knots,
                          pord) {
-  xmin <- attr(knots, which = "xmin")
-  xmax <- attr(knots, which = "xmax")
-  # if pord == 1 take point halfway, otherwise the
-  # begin and endpoint of B-spline basis:
-  if (pord == 1) {
-    x <- 0.5 * (xmin + xmax)
+  cyclic <- attr(knots, which = "cyclic")
+  if (!cyclic) {
+    xmin <- attr(knots, which = "xmin")
+    xmax <- attr(knots, which = "xmax")
+    # if pord == 1 take point halfway, otherwise on
+    # a regular grid including the begin and endpoint
+    if (pord == 1) {
+      x <- 0.5 * (xmin + xmax)
+    } else {
+      x <- seq(xmin, xmax, length = pord)
+    }
+    Bx <- Bsplines(knots, x)
   } else {
-    x <- c(xmin, xmax)
+    Bx <- Bsplines(knots, x=c(0,1/4))
   }
-  Bx <- Bsplines(knots, x)
   CCt <- spam::crossprod.spam(Bx)
   return(CCt)
 }
@@ -172,7 +240,13 @@ constructGinvSplines <- function(q,
     L <- list()
     for (j in seq_len(d)) {
       if (i == j) {
-        L[[j]] <- scaleFactor[j]*constructPenalty(q[j], pord = pord)
+        if (attr(knots[[j]], which = "cyclic")) {
+          D <- cDiff(q[j])
+          DtD <- spam::crossprod.spam(D)
+          L[[j]] <- scaleFactor[j]*DtD
+        } else {
+          L[[j]] <- scaleFactor[j]*constructPenalty(q[j], pord = pord)
+        }
       } else {
         L[[j]] <- spam::diag.spam(q[j])
       }
@@ -394,6 +468,7 @@ nameCoefs <- function(coefs,
         names(coefI) <- "(Intercept)"
         attr(coefI, "termType") <- "(Intercept)"
       } else if (startsWith(x = labI, prefix = "lin(") ||
+                 startsWith(x = labI, prefix = "pol(") ||
                  startsWith(x = labI, prefix = "s(") ||
                  startsWith(x = labI, prefix = "cf(")) {
         ## Spline and (cf) terms are just named 1...n.
@@ -636,4 +711,24 @@ checkMultiResponse <- function(YY, family) {
   }
 }
 
+cDiff <- function(q) {
+  D2 <- spam::spam(x=0, nrow=q, ncol=q+2)
+  p <- c(1, -2 * cos(2 * pi/q), 1)
+  for (k in 1:q) {
+    D2[k, (0:2) + k] <- p
+  }
+  D <- D2[, 2:(q + 1)]
+  D[, 1] <- D[, 1] + D2[, q + 2]
+  D[, q] <- D[, q] + D2[, 1]
+  D
+}
 
+# cBsplines <- function(knots, x) {
+#   bdegr <- attr(knots, which="degree")
+#   B0 <- Bsplines(knots, x)
+#   nseg <- ncol(B0) - bdegr
+#   cc <- (1:bdegr) + nseg
+#   B <- B0[, 1:nseg, drop = FALSE]
+#   B[, 1:bdegr] <- B[, 1:bdegr] + B0[, cc]
+#   B
+# }

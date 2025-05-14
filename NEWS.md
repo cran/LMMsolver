@@ -1,3 +1,10 @@
+# LMMsolver 1.0.10
+
+-   Cyclic B-splines models added for `spl1D()` and `spl2D()` functions. 
+-   Third order differences (`pord=3`) added for `splxD()` functions.
+-   New argument `type = c("response", "link")` for `predict()` function.
+-   bug fixed for GLMM models if weights are close to zero. 
+
 # LMMsolver 1.0.9
 
 -   Binomial response can now also be modelled as `fixed = cbind(failure, succes)`

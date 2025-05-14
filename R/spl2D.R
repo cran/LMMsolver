@@ -6,23 +6,45 @@ spl2D <- function(x1,
                   nseg,
                   pord = 2,
                   degree = 3,
+                  cyclic = c(FALSE, FALSE),
                   scaleX = TRUE,
                   x1lim = range(x1),
                   x2lim = range(x2),
                   cond = NULL,
                   level = NULL) {
   ## Checks.
-  if (!is.numeric(pord) || length(pord) > 1 || !pord %in% 1:2) {
-    stop("pord should be either 1 or 2.\n")
+  if (!is.numeric(pord) || length(pord) > 1 || !pord %in% 1:3) {
+    stop("pord should be equal to 1, 2 or 3.\n")
   }
   if (!is.numeric(degree) || length(degree) > 1 || degree < 1 ||
       degree != round(degree)) {
     stop("degree should be a positive integer.\n")
   }
+  if (pord > degree) {
+    stop("pord should be less or equal to degree.\n")
+  }
   if (!is.numeric(nseg) || length(nseg) != 2 || any(nseg < 1) ||
       any(nseg != round(nseg))) {
     stop("nseg should be a vector of length two of positive integers.\n")
   }
+  if (!is.logical(cyclic) || length(cyclic) != 2) {
+    stop("cyclic should be a logical vector of length two.\n")
+  }
+  if (any(cyclic)) {
+    if (cyclic[1]) {
+      x1lim = c(0,1)
+      if (min(x1) < 0 || max(x1) > 1) {
+        stop("x1 should be in the range [0,1] for cyclic data.\n")
+      }
+    }
+    if (cyclic[2]) {
+      x2lim = c(0,1)
+      if (min(x2) < 0 || max(x2) > 1) {
+        stop("x2 should be in the range [0,1] for cyclic data.\n")
+      }
+    }
+  }
+
   ## Save names of the x-variables so they can be used later on in predictions.
   x1Name <- deparse(substitute(x1))
   x2Name <- deparse(substitute(x2))
@@ -45,8 +67,8 @@ spl2D <- function(x1,
   checkLim(lim = x1lim, limName = "x1lim", x = x1, xName = x1Name)
   checkLim(lim = x2lim, limName = "x2lim", x = x2, xName = x2Name)
   knots <- vector(mode = "list", length = 2)
-  knots[[1]] <- PsplinesKnots(x1lim[1], x1lim[2], degree = degree, nseg = nseg[1])
-  knots[[2]] <- PsplinesKnots(x2lim[1], x2lim[2], degree = degree, nseg = nseg[2])
+  knots[[1]] <- PsplinesKnots(x1lim[1], x1lim[2], degree = degree, nseg = nseg[1], cyclic[1])
+  knots[[2]] <- PsplinesKnots(x2lim[1], x2lim[2], degree = degree, nseg = nseg[2], cyclic[2])
   B1 <- Bsplines(knots[[1]], x1)
   B2 <- Bsplines(knots[[2]], x2)
   q <- c(ncol(B1), ncol(B2))
@@ -72,7 +94,12 @@ spl2D <- function(x1,
     term.labels.f <- NULL
   } else {
     dim.f <- ncol(X)
-    term.labels.f <- paste0("lin(", paste(xNames, collapse = ", "), ")")
+    if (pord > 2) {
+      trm <- "pol"
+    } else {
+      trm <- "lin"
+    }
+    term.labels.f <- paste0(trm,"(", paste(xNames, collapse = ", "), ")")
   }
   dim.r <- ncol(B12)
   term.labels.r <-  paste0("s(", paste(xNames, collapse = ", "), ")")

@@ -4,8 +4,8 @@ Title: Linear Mixed Model Solver
 Description: An efficient and flexible system to solve sparse mixed model
     equations. Important applications are the use of splines to model spatial or temporal
     trends as described in Boer (2023). (<doi:10.1177/1471082X231178591>).
-Version: 1.0.9
-Date: 2025-01-14
+Version: 1.0.10
+Date: 2025-05-14
 Authors@R: c(person(given = "Martin", 
                     family = "Boer", 
                     email = "martin.boer@wur.nl", 
@@ -29,10 +29,10 @@ URL: https://biometris.github.io/LMMsolver/index.html,
         https://github.com/Biometris/LMMsolver/
 BugReports: https://github.com/Biometris/LMMsolver/issues
 NeedsCompilation: yes
-Packaged: 2025-01-14 15:27:07 UTC; rossu027
-Author: Martin Boer [aut] (<https://orcid.org/0000-0002-1879-4588>),
-  Bart-Jan van Rossum [aut, cre]
-    (<https://orcid.org/0000-0002-8673-2514>)
+Packaged: 2025-05-14 10:05:01 UTC; rossu027
+Author: Martin Boer [aut] (ORCID: <https://orcid.org/0000-0002-1879-4588>),
+  Bart-Jan van Rossum [aut, cre] (ORCID:
+    <https://orcid.org/0000-0002-8673-2514>)
 Maintainer: Bart-Jan van Rossum <bart-jan.vanrossum@wur.nl>
 Repository: CRAN
-Date/Publication: 2025-01-14 16:10:02 UTC
+Date/Publication: 2025-05-14 10:40:02 UTC

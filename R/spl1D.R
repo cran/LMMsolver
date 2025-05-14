@@ -8,6 +8,7 @@
 #' @param scaleX Should the fixed effects be scaled.
 #' @param pord The order of penalty, default \code{pord = 2}
 #' @param degree The degree of B-spline basis, default \code{degree = 3}
+#' @param cyclic Cyclic or linear B-splines; default \code{cyclic=FALSE}
 #' @param xlim,x1lim,x2lim,x3lim A numerical vector of length 2 containing the
 #' domain of the corresponding x covariate where the knots should be placed.
 #' Default set to \code{NULL}, when the covariate range will be used.
@@ -66,22 +67,39 @@ spl1D <- function(x,
                   nseg,
                   pord = 2,
                   degree = 3,
+                  cyclic = FALSE,
                   scaleX = TRUE,
                   xlim = range(x),
                   cond = NULL,
                   level = NULL) {
-  ## Checks.
-  if (!is.numeric(pord) || length(pord) > 1 || !pord %in% 1:2) {
-    stop("pord should be either 1 or 2.\n")
+  ## Checks
+  if (!is.numeric(pord) || length(pord) > 1 || !pord %in% 1:3) {
+    stop("pord should be equal to 1, 2 or 3.\n")
   }
   if (!is.numeric(degree) || length(degree) > 1 || degree < 1 ||
       degree != round(degree)) {
     stop("degree should be a positive integer.\n")
   }
+  if (pord > degree) {
+    stop("pord should be less or equal to degree.\n")
+  }
   if (!is.numeric(nseg) || length(nseg) > 1 || nseg < 1 ||
       nseg != round(nseg)) {
     stop("nseg should be a positive integer.\n")
   }
+  if (!is.logical(cyclic) || length(cyclic) > 1) {
+    stop("cyclic should be FALSE or TRUE.\n")
+  }
+  if (cyclic) {
+    xlim = c(0,1)
+    if (min(x) < 0 || max(x) > 1) {
+      stop("x should be in the range [0,1] for cyclic data.\n")
+    }
+    if (pord != 2) {
+      stop("pord should be equal to two for cyclic data.\n")
+    }
+  }
+
   ## Save names of the x-variables so they can be used later on in predictions.
   xName <- deparse(substitute(x))
   if (!exists(xName, where = parent.frame(), inherits = FALSE)) {
@@ -98,7 +116,7 @@ spl1D <- function(x,
   }
   checkLim(lim = xlim, limName = "xlim", x = x, xName = xName)
   knots <- vector(mode = "list", length = 1)
-  knots[[1]] <- PsplinesKnots(xlim[1], xlim[2], degree = degree, nseg = nseg)
+  knots[[1]] <- PsplinesKnots(xlim[1], xlim[2], degree = degree, nseg = nseg, cyclic=cyclic)
   B <- Bsplines(knots[[1]], x)
   q <- ncol(B)
   if (conditional) {
@@ -120,7 +138,11 @@ spl1D <- function(x,
     term.labels.f <- NULL
   } else {
     dim.f <- ncol(X)
-    term.labels.f <- paste0("lin(", xName, ")")
+    if (pord > 2) {
+      term.labels.f <- paste0("pol(", xName, ")")
+    } else {
+      term.labels.f <- paste0("lin(", xName, ")")
+    }
   }
   dim.r <- ncol(B)
   term.labels.r <- paste0("s(", xName, ")")

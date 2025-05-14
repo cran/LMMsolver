@@ -11,6 +11,7 @@ spl1D(
   nseg,
   pord = 2,
   degree = 3,
+  cyclic = FALSE,
   scaleX = TRUE,
   xlim = range(x),
   cond = NULL,
@@ -23,6 +24,7 @@ spl2D(
   nseg,
   pord = 2,
   degree = 3,
+  cyclic = c(FALSE, FALSE),
   scaleX = TRUE,
   x1lim = range(x1),
   x2lim = range(x2),
@@ -52,6 +54,8 @@ the \code{x} covariates.}
 \item{pord}{The order of penalty, default \code{pord = 2}}
 
 \item{degree}{The degree of B-spline basis, default \code{degree = 3}}
+
+\item{cyclic}{Cyclic or linear B-splines; default \code{cyclic=FALSE}}
 
 \item{scaleX}{Should the fixed effects be scaled.}
 

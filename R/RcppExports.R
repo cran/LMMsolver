@@ -49,19 +49,7 @@ RowKron <- function(sX1, sX2) {
     .Call(`_LMMsolver_RowKron`, sX1, sX2)
 }
 
-cntProduct <- function(sA, sB) {
-    .Call(`_LMMsolver_cntProduct`, sA, sB)
-}
-
 MatrixProduct <- function(sA, sB) {
     .Call(`_LMMsolver_MatrixProduct`, sA, sB)
-}
-
-logdet <- function(obj, lambda) {
-    .Call(`_LMMsolver_logdet`, obj, lambda)
-}
-
-PrintCholesky <- function(obj) {
-    .Call(`_LMMsolver_PrintCholesky`, obj)
 }
 
