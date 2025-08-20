@@ -376,6 +376,7 @@ deviance.LMMsolve <- function(object,
 #' When type = "response" (default) fitted values or predictions on the scale of
 #' the response are returned (possibly with associated standard errors).
 #' @param se.fit calculate standard errors, default \code{FALSE}.
+#' @param deriv Character string of variable for which to calculate the first derivative; default \code{NULL}.
 #' @param ... other arguments. Not yet implemented.
 #'
 #' @returns A data.frame with predictions for the smooth trend on the specified
@@ -395,16 +396,20 @@ deviance.LMMsolve <- function(object,
 #' obj <- LMMsolve(fixed = y ~ 1,
 #'          spline = ~spl1D(x, nseg = 50), data = dat)
 #'
-#' ## make predictions on a grid
-#' newdat <- data.frame(x = seq(0, 1, length = 300))
+#' ## make predictions
+#' newdat <- data.frame(x = seq(0, 1, length = 5))
 #' pred <- predict(obj, newdata = newdat, se.fit = TRUE)
-#' head(pred)
+#' pred
 #'
+#' ## make predictions for derivative of x:
+#' pred2 <- predict(obj, newdata = newdat, se.fit = TRUE, deriv = "x")
+#' pred2
 #' @export
 predict.LMMsolve <- function(object,
                              newdata,
                              type = c("response", "link"),
                              se.fit = FALSE,
+                             deriv = NULL,
                              ...) {
   type <- match.arg(type)
   if (!inherits(object, "LMMsolve")) {
@@ -427,7 +432,6 @@ predict.LMMsolve <- function(object,
       stop("use of factors not implemented yet for multinomial.\n")
     }
   }
-
   varNames <- unlist(sapply(object$splRes,function(z){names(z$x)}))
   colNames <- colnames(newdata)
   Missing <- !(varNames %in% colNames)
@@ -444,6 +448,57 @@ predict.LMMsolve <- function(object,
   s2 <-sum(sapply(object$ndxCoefficients,
                    function(x) {attr(x,which="termType") == "grp"}))
   if (s2 > 0) stop("predict function for grp() not implemented yet")
+
+  if (!is.null(deriv)) {
+    if (!is.character(deriv)) {
+      stop("Argument deriv should be a character string\n")
+    }
+    if (length(deriv) != 1) {
+      stop("Argument deriv should have length one.")
+    }
+    if (object$family$family != "gaussian") {
+      stop("Derivatives for non-gaussian data not implemented yet\n")
+    }
+
+    isDeriv <- sapply(object$splRes,FUN= function(spl) {
+                                        nameVar <- names(spl$x)
+                                        if (length(nameVar) > 1) return(FALSE)
+                                        nameVar == deriv})
+    if (all(!isDeriv)) stop("Cannot find derivative for ", deriv, "\n")
+    spl_nr <- which(isDeriv)
+
+    spl <- object$splRes[[spl_nr]]
+    chkValBsplines(spl, newdata)
+    knots <- spl$knots[[spl_nr]]
+    pord <- spl$pord
+    scaleX <- spl$scaleX
+    x <- newdata[[deriv]]
+    dB <- Bsplines(knots, x, deriv = 1)
+    nRow <- nrow(newdata)
+    dim <- object$dim
+    lU <- list()
+    for (i in seq_along(dim)) {
+      lU[[i]] <- spam::spam(x = 0, nrow = nRow, ncol = dim[i])
+    }
+
+    labels <- c(object$term.labels.f, object$term.labels.r)
+    ndx.r <- which(spl$term.labels.r == labels)
+    if (!is.null(spl$term.labels.f)) {
+      ndx.f <- which(spl$term.labels.f == labels)
+      G <- constructG(knots = knots, scaleX = scaleX, pord = pord)
+      dBG <- dB %*% G
+      dBG <- dBG[,-1, drop=FALSE]
+      lU[[ndx.f]] <- dBG
+    }
+    lU[[ndx.r]] <- dB
+    U <- Reduce(spam::cbind.spam, lU)
+    outDat <- newdata
+    outDat[["ypred"]] <- as.vector(U %*% object$coefMME)
+    if (se.fit) {
+      outDat[["se"]] <- calcStandardErrors(C = object$C, D = U)
+    }
+    return(outDat)
+  }
 
   splFixLab <- sapply(object$splRes, function(x) { x$term.labels.f })
   splRanLab <- sapply(object$splRes, function(x) { x$term.labels.r })
@@ -481,10 +536,10 @@ predict.LMMsolve <- function(object,
   }
 
   for (i in seq_along(dim)) {
-    lU[[i]] = spam::spam(x = 0, nrow = nRow, ncol = dim[i]/nCat)
+    lU[[i]] <- spam::spam(x = 0, nrow = nRow, ncol = dim[i]/nCat)
   }
   # intercept:
-  lU[[1]] = spam::spam(x = 1, nrow = nRow, ncol = 1)
+  lU[[1]] <- spam::spam(x = 1, nrow = nRow, ncol = 1)
 
   labels <- c(object$term.labels.f, object$term.labels.r)
 

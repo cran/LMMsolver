@@ -288,7 +288,7 @@ calcNomEffDim <- function(X,
   e <- cumsum(dim.r)
   s <- e - dim.r + 1
   # for each variance component in Z:
-  for (i in 1:length(dim.r)) {
+  for (i in seq_along(dim.r)) {
     ndx <- s[i]:e[i]
     Zi <- Z[, ndx, drop = FALSE]
     # if number of columns is high, use upper bound:
@@ -688,7 +688,7 @@ chkValBsplines <- function(spl, newdata) {
 
 checkMultiResponse <- function(YY, family) {
   if (!inherits(YY, "matrix")) {
-    str <- paste("family", family$family, ": response should be a matrix.")
+    str <- paste("family", family$family, ": response should be a matrix or a factor.")
     stop(str)
   }
   if (ncol(YY) == 2 && family$family == "multinomial") {
@@ -714,7 +714,7 @@ checkMultiResponse <- function(YY, family) {
 cDiff <- function(q) {
   D2 <- spam::spam(x=0, nrow=q, ncol=q+2)
   p <- c(1, -2 * cos(2 * pi/q), 1)
-  for (k in 1:q) {
+  for (k in seq_len(q)) {
     D2[k, (0:2) + k] <- p
   }
   D <- D2[, 2:(q + 1)]

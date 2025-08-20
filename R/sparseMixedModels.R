@@ -101,10 +101,10 @@ sparseMixedModels <- function(y,
   if (!is.null(grpTheta)) {
     nGrp <- max(grpTheta)
     if (length(fixedTheta) != nGrp) {
-      stop("problem with number of groups defined in grpTheta argument")
+      stop("problem with number of groups defined in grpTheta argument", call. = FALSE)
     }
     conM <- spam::spam(x = 0, nrow = NvarcompTot, ncol = nGrp)
-    for (i in 1:NvarcompTot) {
+    for (i in seq_len(NvarcompTot)) {
       conM[i, grpTheta[i]] <- 1
     }
     fixedThetaRes <- fixedTheta
@@ -113,21 +113,13 @@ sparseMixedModels <- function(y,
     fixedThetaRes <- fixedTheta
   }
 
-  if (Nvarcomp > 0) {
-    psi <- theta[1:Nvarcomp]
-    phi <- theta[-(1:Nvarcomp)]
-  } else {
-    psi <- NULL
-    phi <- theta
-  }
-
   ## Check the stucture of Rinv, don't allow for overlapping penalties
   M <- sapply(lRinv, FUN = function(x) {
     abs(spam::diag.spam(x)) > getOption("spam.eps")})
   rSums <- rowSums(M)
   #if (!isTRUE(all.equal(rSums, rep(1, nrow(M))))) {
   if (max(rSums) > 1) {
-    stop("Overlapping penalties for residual part.\n")
+    stop("Overlapping penalties for residual part.\n", call. = FALSE)
   }
   ## Calculate number of elements per group for residuals.
   nR <- colSums(M)
@@ -150,8 +142,8 @@ sparseMixedModels <- function(y,
   traceDf <- NULL
   for (it in seq_len(maxit)) {
     if (Nvarcomp > 0) {
-      psi <- theta[seq_along(psi)]
-      phi <- theta[-(seq_along(psi))]
+      psi <- theta[seq_len(Nvarcomp)]
+      phi <- theta[-(seq_len(Nvarcomp))]
     } else {
       psi <- NULL
       phi <- theta

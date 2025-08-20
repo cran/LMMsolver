@@ -2,6 +2,11 @@ constructRandom <- function(random, group, condFactor, data) {
   ## Make random part.
   if (!is.null(random)) {
     mf <- model.frame(random, data, drop.unused.levels = TRUE, na.action = NULL)
+    names_mf <- names(mf)
+    IsValidName <- names_mf == make.names(names_mf)
+    if (!all(IsValidName)) {
+      stop("Syntactically invalid name(s): ", paste(names_mf[which(!IsValidName)], collapse=", "), "\n")
+    }
     mt <- terms(mf)
     f.terms <- all.vars(mt)[attr(mt, "dataClasses") == "factor"]
     Z1 <- Matrix::sparse.model.matrix(mt, data = mf,
@@ -63,7 +68,7 @@ constructRandom <- function(random, group, condFactor, data) {
     e <- cumsum(dim.r)
     s <- e - dim.r + 1
     lGinv <- list()
-    for (i in 1:length(dim.r)) {
+    for (i in seq_along(dim.r)) {
       tmp <- rep(0, sum(dim.r))
       tmp[s[i]:e[i]] <- 1
       lGinv[[i]] <- spam::cleanup(spam::diag.spam(tmp))

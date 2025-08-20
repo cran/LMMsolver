@@ -22,16 +22,15 @@ fitLMM <- function(y, X, Z, w, lGinv, tolerance, trace, maxit,
   ## set theta
   if (!is.null(theta)) {
     if (length(theta) != length(scFactor)) {
-      stop("Argument theta has wrong length \n")
+      stop("Argument theta has wrong length \n", call. = FALSE)
     }
-    theta <- theta / scFactor
   } else {
     theta <- 1 / scFactor
   }
   ## set grpTheta
   if (!is.null(grpTheta)) {
     if (length(grpTheta) != length(scFactor)) {
-      stop("Argument grpTheta has wrong length \n")
+      stop("Argument grpTheta has wrong length \n", call. = FALSE)
     }
   } else {
     grpTheta <- c(1:length(scFactor))
@@ -55,7 +54,7 @@ fitLMM <- function(y, X, Z, w, lGinv, tolerance, trace, maxit,
     fixedTheta <- c(rep(FALSE, nNonRes), rep(TRUE, nRes))
     theta[(nNonRes + 1):(nNonRes + nRes)] <- 1
     trace_GLMM <- NULL
-    for (i in 1:maxit) {
+    for (i in seq_len(maxit)) {
       deriv <- family$mu.eta(eta)
       z <- (eta - offset) + (y - mu)/deriv
       wGLM <- as.vector(deriv^2 / family$variance(mu))
@@ -134,7 +133,7 @@ fitLMM <- function(y, X, Z, w, lGinv, tolerance, trace, maxit,
     theta[(nNonRes + 1):(nNonRes + nRes)] <- 1
 
     trace_GLMM <- NULL
-    for (i in 1:maxit) {
+    for (i in seq_len(maxit)) {
       Eta <- matrix(data=eta, ncol=nCat, nrow=n, byrow=TRUE)
       Pi <- t(apply(X=Eta, MARGIN=1, FUN = family$linkinv))
       pi_vec <- as.vector(t(Pi))
