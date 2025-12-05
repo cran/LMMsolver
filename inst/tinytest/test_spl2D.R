@@ -1,7 +1,4 @@
-## Use the oats data described in BioRxiv 2021 paper by Hans-Peter Piepho.
-data("durban.rowcol", package = "agridat")
-## Restict data to 5 columns and rows for speed of testing.
-durban.rowcol <- durban.rowcol[durban.rowcol$row < 6 & durban.rowcol$bed < 6, ]
+load("testdata.rda")
 
 ## Some tests on correct input checking for spl2D.
 
@@ -124,6 +121,20 @@ expect_equal(sumObj2[["Term"]],
 expect_equal(sumObj2[["Ratio"]],
              c(1, 1, 0.458895940871542, 4.82648592298555e-05,
                0.0821598533833015, 0.458895940885926))
+
+## pord=1
+obj1a <- LMMsolve(fixed = yield ~ 1, random = ~ gen,
+                 spline = ~ spl2D(x1 = bed, x2 = row, nseg = c(3, 3), pord = 1),
+                 data = durban.rowcol,
+                 tolerance = 1e-6)
+expect_equivalent_to_reference(obj1a, "spl2DFull2", tolerance= 1.0e-6)
+
+## pord=3
+obj1b <- LMMsolve(fixed = yield ~ 1, random = ~ gen,
+                  spline = ~ spl2D(x1 = bed, x2 = row, nseg = c(3, 3) , pord = 3),
+                  data = durban.rowcol,
+                  tolerance = 1e-6)
+expect_equivalent_to_reference(obj1b, "spl2DFull3", tolerance= 1.0e-6)
 
 ## cyclic: cylinder
 

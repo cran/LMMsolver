@@ -11,7 +11,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 
 
-<meta name="date" content="2025-08-19" />
+<meta name="date" content="2025-12-05" />
 
 <title>Mixed Models and Smoothing</title>
 
@@ -49,8 +49,9 @@ overflow: visible;
 }
 </style>
 <style type="text/css" data-origin="pandoc">
+html { -webkit-text-size-adjust: 100%; }
 pre > code.sourceCode { white-space: pre; position: relative; }
-pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
 pre > code.sourceCode > span:empty { height: 1.2em; }
 .sourceCode { overflow: visible; }
 code.sourceCode > span { color: inherit; text-decoration: inherit; }
@@ -61,7 +62,7 @@ div.sourceCode { overflow: auto; }
 }
 @media print {
 pre > code.sourceCode { white-space: pre-wrap; }
-pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
 }
 pre.numberSource code
 { counter-reset: source-line 0; }
@@ -361,39 +362,43 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 
 <h1 class="title toc-ignore">Mixed Models and Smoothing</h1>
-<h4 class="date">2025-08-19</h4>
+<h4 class="date">2025-12-05</h4>
 
 
 
 <div id="the-lmmsolver-package" class="section level1 unnumbered">
 <h1 class="unnumbered">The LMMsolver package</h1>
-<p>The aim of the <code>LMMsolver</code> package is to provide an
-efficient and flexible system to estimate variance components using
-restricted maximum likelihood or REML <span class="citation">(<a href="#ref-Patterson1971">Patterson and Thompson 1971</a>)</span>, for
-models where the mixed model equations are sparse. An important feature
-of the package is smoothing with P-splines <span class="citation">(<a href="#ref-Eilers1996">Eilers and Marx 1996</a>)</span>. The sparse
-mixed model P-splines formulation <span class="citation">(<a href="#ref-boer2023">Boer 2023</a>)</span> is used, which makes the
-computations fast. The computational advantage of the sparse mixed model
-formulation is especially clear for smoothing in higher dimensions <span class="citation">(<a href="#ref-boer2023">Boer 2023</a>; <a href="#ref-carollo2024">Carollo et al. 2024</a>)</span>.</p>
-<!-- An example of an application is using splines to model spatial [@Rodriguez-Alvarez2018; @Boer2020] or temporal [@Bustos-Korts2019] trends. Another example is mixed model Quantitative Trait Locus (QTL) analysis for multiparental populations, allowing for heterogeneous residual variance and design matrices with Identity-By-Descent (IBD) probabilities [@Li2021]. -->
+<p>The goal of the <code>LMMsolver</code> package is to fit linear mixed
+models efficiently when the model structure is large or sparse. It
+provides tools for estimating variance components using restricted
+maximum likelihood (REML) <span class="citation">(<a href="#ref-Patterson1971">Patterson and Thompson 1971</a>)</span> and is
+especially useful for models that include many random effects or smooth
+terms.</p>
+<p>LMMsolver is intended for users working with spatial, temporal, or
+high-dimensional data who need to fit large mixed models efficiently and
+reliably.</p>
+<p>A key feature of the package is support for smoothing using P-splines
+<span class="citation">(<a href="#ref-Eilers1996">Eilers and Marx
+1996</a>)</span>. LMMsolver is based on a sparse formulation of mixed
+model P-splines <span class="citation">(<a href="#ref-boer2023">Boer
+2023</a>)</span>, which makes computations fast and memory efficient.
+The performance benefits are particularly noticeable for
+higher-dimensional smoothing problems such as spatial surfaces or
+multi-dimensional trends <span class="citation">(<a href="#ref-boer2023">Boer 2023</a>; <a href="#ref-carollo2024">Carollo
+et al. 2024</a>)</span>.</p>
 <p>A Linear Mixed Model (LMM) has the form</p>
 <p><span class="math display">\[
   y = X \beta + Z u + e, \quad u \sim N(0,G), \quad e \sim N(0,R) \;,
 \]</span> where <span class="math inline">\(y\)</span> is a vector of
 observations, <span class="math inline">\(\beta\)</span> is a vector
 with the fixed effects, <span class="math inline">\(u\)</span> is a
-vector with the random effects, and <span class="math inline">\(e\)</span> a vector of random residuals. <span class="math inline">\(X\)</span> and <span class="math inline">\(Z\)</span> are design matrices.</p>
-<!-- The `LMMsolver` package can fit models where the matrices $G^{-1}$ and $R^{-1}$ are a linear combination of precision matrices $Q_{G,i}$ and $Q_{R,i}$: $$ -->
-<!--   G^{-1} = \sum_{i} \psi_i Q_{G,i} \;, \quad   R^{-1} = \sum_{i} \phi_i Q_{R,i} \;, -->
-<!-- $$ where the precision parameters $\psi_i$ and $\phi_i$ are estimated using REML. For most standard mixed models $1/{\psi_i}$ are the variance components and $1/{\phi_i}$ the residual variances. We use a formulation in terms of precision parameters to allow for non-standard mixed models using tensor product splines introduced in @Rodriguez-Alvarez2015. -->
-<p>If the matrices <span class="math inline">\(X\)</span>, <span class="math inline">\(Z\)</span>, <span class="math inline">\(G^{-1}\)</span> and <span class="math inline">\(R^{-1}\)</span> are sparse, the mixed model
-equations can be solved using efficient sparse matrix algebra
-implemented in the <code>spam</code> package <span class="citation">(<a href="#ref-Furrer2010">Furrer and Sain 2010</a>)</span>. To calculate
-the derivatives of the log-likelihood in an efficient way, the automatic
-differentiation of the Cholesky matrix <span class="citation">(<a href="#ref-Smith1995">Smith 1995</a>; <a href="#ref-boer2023">Boer
-2023</a>)</span> was implemented in C++ using the <code>Rcpp</code>
-package <span class="citation">(<a href="#ref-Eddelbuettel2018">Eddelbuettel and Balamuta
-2018</a>)</span>.</p>
+vector with the random effects, and <span class="math inline">\(e\)</span> a vector of random residuals. <span class="math inline">\(X\)</span> and <span class="math inline">\(Z\)</span> are design matrices; <span class="math inline">\(G\)</span> and <span class="math inline">\(R\)</span> are covariance matrices; the
+corresponding inverse matrices <span class="math inline">\(G^{-1}\)</span> and <span class="math inline">\(R^{-1}\)</span> are called <em>precision</em>
+matrices.</p>
+<p>In many smoothing and spatial applications, the design and precision
+matrices contain mostly zeros and are therefore <em>sparse</em>.
+<code>LMMsolver</code> is designed to exploit this structure to reduce
+both computation time and memory usage.</p>
 </div>
 <div id="introduction" class="section level1" number="1">
 <h1><span class="header-section-number">1</span> Introduction</h1>
@@ -674,17 +679,15 @@ Sainsbury-Dale, and Zammit-Mangion 2022</a>)</span>.</p>
 testing data set, each consisting of approximately 8,000
 observations.</p>
 <div class="sourceCode" id="cb24"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb24-1"><a href="#cb24-1" tabindex="-1"></a><span class="fu">data</span>(SeaSurfaceTemp)</span>
-<span id="cb24-2"><a href="#cb24-2" tabindex="-1"></a><span class="fu">head</span>(SeaSurfaceTemp, <span class="dv">5</span>)</span>
+<span id="cb24-2"><a href="#cb24-2" tabindex="-1"></a><span class="fu">head</span>(SeaSurfaceTemp, <span class="dv">3</span>)</span>
 <span id="cb24-3"><a href="#cb24-3" tabindex="-1"></a><span class="co">#&gt;        lon      lat    sst  type</span></span>
 <span id="cb24-4"><a href="#cb24-4" tabindex="-1"></a><span class="co">#&gt; 1 -51.5607 -38.2629 289.94 train</span></span>
 <span id="cb24-5"><a href="#cb24-5" tabindex="-1"></a><span class="co">#&gt; 2 -55.0255 -49.3163 278.60 train</span></span>
 <span id="cb24-6"><a href="#cb24-6" tabindex="-1"></a><span class="co">#&gt; 3 -48.4228 -35.7470 291.51 train</span></span>
-<span id="cb24-7"><a href="#cb24-7" tabindex="-1"></a><span class="co">#&gt; 4 -48.7221 -44.2118 282.78 train</span></span>
-<span id="cb24-8"><a href="#cb24-8" tabindex="-1"></a><span class="co">#&gt; 5 -54.5217 -47.3870 282.44 train</span></span>
-<span id="cb24-9"><a href="#cb24-9" tabindex="-1"></a><span class="fu">table</span>(SeaSurfaceTemp<span class="sc">$</span>type)</span>
-<span id="cb24-10"><a href="#cb24-10" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb24-11"><a href="#cb24-11" tabindex="-1"></a><span class="co">#&gt;  test train </span></span>
-<span id="cb24-12"><a href="#cb24-12" tabindex="-1"></a><span class="co">#&gt;  7894  7713</span></span></code></pre></div>
+<span id="cb24-7"><a href="#cb24-7" tabindex="-1"></a><span class="fu">table</span>(SeaSurfaceTemp<span class="sc">$</span>type)</span>
+<span id="cb24-8"><a href="#cb24-8" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb24-9"><a href="#cb24-9" tabindex="-1"></a><span class="co">#&gt;  test train </span></span>
+<span id="cb24-10"><a href="#cb24-10" tabindex="-1"></a><span class="co">#&gt;  7894  7713</span></span></code></pre></div>
 <p>First we convert SST from Kelvin to Celsius and split the data in the
 training and test set:</p>
 <div class="sourceCode" id="cb25"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb25-1"><a href="#cb25-1" tabindex="-1"></a><span class="co"># convert from Kelvin to Celsius</span></span>
@@ -883,13 +886,11 @@ failures).</p>
 <span id="cb35-10"><a href="#cb35-10" tabindex="-1"></a>                })</span>
 <span id="cb35-11"><a href="#cb35-11" tabindex="-1"></a>dat <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(<span class="at">x =</span> x, <span class="at">succes =</span> nsucces, </span>
 <span id="cb35-12"><a href="#cb35-12" tabindex="-1"></a>                         <span class="at">failure=</span> sz <span class="sc">-</span> nsucces)</span>
-<span id="cb35-13"><a href="#cb35-13" tabindex="-1"></a><span class="fu">head</span>(dat, <span class="dv">5</span>)</span>
+<span id="cb35-13"><a href="#cb35-13" tabindex="-1"></a><span class="fu">head</span>(dat, <span class="dv">3</span>)</span>
 <span id="cb35-14"><a href="#cb35-14" tabindex="-1"></a><span class="co">#&gt;            x succes failure</span></span>
 <span id="cb35-15"><a href="#cb35-15" tabindex="-1"></a><span class="co">#&gt; 1 0.00000000      3       7</span></span>
 <span id="cb35-16"><a href="#cb35-16" tabindex="-1"></a><span class="co">#&gt; 2 0.01010101      5       5</span></span>
-<span id="cb35-17"><a href="#cb35-17" tabindex="-1"></a><span class="co">#&gt; 3 0.02020202      5       5</span></span>
-<span id="cb35-18"><a href="#cb35-18" tabindex="-1"></a><span class="co">#&gt; 4 0.03030303      5       5</span></span>
-<span id="cb35-19"><a href="#cb35-19" tabindex="-1"></a><span class="co">#&gt; 5 0.04040404      4       6</span></span></code></pre></div>
+<span id="cb35-17"><a href="#cb35-17" tabindex="-1"></a><span class="co">#&gt; 3 0.02020202      5       5</span></span></code></pre></div>
 <p>Next we can analyse the data using <code>family = binomial()</code>,
 and for the response using <code>cbind(succes, failure)</code>:</p>
 <div class="sourceCode" id="cb36"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb36-1"><a href="#cb36-1" tabindex="-1"></a>obj3 <span class="ot">&lt;-</span> <span class="fu">LMMsolve</span>(<span class="at">fixed =</span> <span class="fu">cbind</span>(succes, failure) <span class="sc">~</span> <span class="dv">1</span>,</span>
@@ -960,12 +961,11 @@ depend on a single variable <span class="math inline">\(x\)</span>:</p>
 <span id="cb40-6"><a href="#cb40-6" tabindex="-1"></a>                      } ))</span>
 <span id="cb40-7"><a href="#cb40-7" tabindex="-1"></a><span class="fu">colnames</span>(multiNom) <span class="ot">&lt;-</span> <span class="fu">names</span>(mu)</span>
 <span id="cb40-8"><a href="#cb40-8" tabindex="-1"></a>dat <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(x, multiNom)</span>
-<span id="cb40-9"><a href="#cb40-9" tabindex="-1"></a><span class="fu">head</span>(dat, <span class="dv">4</span>)</span>
-<span id="cb40-10"><a href="#cb40-10" tabindex="-1"></a><span class="co">#&gt;            x  A B C D</span></span>
-<span id="cb40-11"><a href="#cb40-11" tabindex="-1"></a><span class="co">#&gt; 1 0.03545673  7 0 0 3</span></span>
-<span id="cb40-12"><a href="#cb40-12" tabindex="-1"></a><span class="co">#&gt; 2 0.56507611  0 1 9 0</span></span>
-<span id="cb40-13"><a href="#cb40-13" tabindex="-1"></a><span class="co">#&gt; 3 0.28025778  2 8 0 0</span></span>
-<span id="cb40-14"><a href="#cb40-14" tabindex="-1"></a><span class="co">#&gt; 4 0.20419632 10 0 0 0</span></span></code></pre></div>
+<span id="cb40-9"><a href="#cb40-9" tabindex="-1"></a><span class="fu">head</span>(dat, <span class="dv">3</span>)</span>
+<span id="cb40-10"><a href="#cb40-10" tabindex="-1"></a><span class="co">#&gt;            x A B C D</span></span>
+<span id="cb40-11"><a href="#cb40-11" tabindex="-1"></a><span class="co">#&gt; 1 0.03545673 7 0 0 3</span></span>
+<span id="cb40-12"><a href="#cb40-12" tabindex="-1"></a><span class="co">#&gt; 2 0.56507611 0 1 9 0</span></span>
+<span id="cb40-13"><a href="#cb40-13" tabindex="-1"></a><span class="co">#&gt; 3 0.28025778 2 8 0 0</span></span></code></pre></div>
 <div class="sourceCode" id="cb41"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb41-1"><a href="#cb41-1" tabindex="-1"></a>obj <span class="ot">&lt;-</span> <span class="fu">LMMsolve</span>(<span class="at">fixed =</span> <span class="fu">cbind</span>(A,B,C,D) <span class="sc">~</span> <span class="dv">1</span>,</span>
 <span id="cb41-2"><a href="#cb41-2" tabindex="-1"></a>                <span class="at">spline =</span> <span class="sc">~</span><span class="fu">spl1D</span>(x, <span class="at">nseg =</span> <span class="dv">17</span>, <span class="at">xlim =</span> <span class="fu">c</span>(<span class="dv">0</span>,<span class="dv">1</span>)),</span>
 <span id="cb41-3"><a href="#cb41-3" tabindex="-1"></a>                <span class="at">data =</span> dat, </span>
@@ -988,14 +988,11 @@ depend on a single variable <span class="math inline">\(x\)</span>:</p>
 <span id="cb42-5"><a href="#cb42-5" tabindex="-1"></a>x0 <span class="ot">&lt;-</span> <span class="fu">seq</span>(<span class="dv">0</span>, <span class="dv">1</span>, <span class="at">by =</span> <span class="fl">0.01</span>)</span>
 <span id="cb42-6"><a href="#cb42-6" tabindex="-1"></a>newdat <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(<span class="at">x =</span> x0)</span>
 <span id="cb42-7"><a href="#cb42-7" tabindex="-1"></a>pred <span class="ot">&lt;-</span> <span class="fu">predict</span>(obj, <span class="at">newdata =</span> newdat)</span>
-<span id="cb42-8"><a href="#cb42-8" tabindex="-1"></a><span class="fu">head</span>(pred)</span>
+<span id="cb42-8"><a href="#cb42-8" tabindex="-1"></a><span class="fu">head</span>(pred, <span class="dv">3</span>)</span>
 <span id="cb42-9"><a href="#cb42-9" tabindex="-1"></a><span class="co">#&gt;      x category     ypred</span></span>
 <span id="cb42-10"><a href="#cb42-10" tabindex="-1"></a><span class="co">#&gt; 1 0.00        A 0.9051117</span></span>
 <span id="cb42-11"><a href="#cb42-11" tabindex="-1"></a><span class="co">#&gt; 2 0.01        A 0.9117668</span></span>
-<span id="cb42-12"><a href="#cb42-12" tabindex="-1"></a><span class="co">#&gt; 3 0.02        A 0.9178041</span></span>
-<span id="cb42-13"><a href="#cb42-13" tabindex="-1"></a><span class="co">#&gt; 4 0.03        A 0.9231971</span></span>
-<span id="cb42-14"><a href="#cb42-14" tabindex="-1"></a><span class="co">#&gt; 5 0.04        A 0.9279194</span></span>
-<span id="cb42-15"><a href="#cb42-15" tabindex="-1"></a><span class="co">#&gt; 6 0.05        A 0.9319405</span></span></code></pre></div>
+<span id="cb42-12"><a href="#cb42-12" tabindex="-1"></a><span class="co">#&gt; 3 0.02        A 0.9178041</span></span></code></pre></div>
 <p>The following code generates the plot with prediction, with the
 points the observed fractions, the dashed curves the true probabilities
 and the solid curves the predicted values:</p>
@@ -1014,35 +1011,33 @@ and the solid curves the predicted values:</p>
 <p><img role="img" src="data:image/png;base64,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" /><!-- --></p>
 </div>
 </div>
-<div id="examples-from-quantitative-genetics" class="section level1" number="4">
-<h1><span class="header-section-number">4</span> Examples from
-Quantitative Genetics</h1>
-<p>In this section we will show some examples from quantitative
-genetics, to illustrate some further options of the package.</p>
-<div id="oats-field-trial" class="section level2" number="4.1">
-<h2><span class="header-section-number">4.1</span> Oats field trial</h2>
-<p>As a first example we will use an oats field trial from the
-<code>agridat</code> package. There were 24 varieties in 3 replicates,
-each consisting of 6 incomplete blocks of 4 plots. The plots were laid
-out in a single row.</p>
+<div id="examples-in-quantitative-genetics-and-agriculture" class="section level1" number="4">
+<h1><span class="header-section-number">4</span> Examples in
+Quantitative Genetics and Agriculture</h1>
+<p>In this section we will show some examples from agriculture and
+quantitative genetics, to illustrate some further options of the
+package.</p>
+<div id="linear-variance-model-oats-data" class="section level2" number="4.1">
+<h2><span class="header-section-number">4.1</span> Linear Variance model
+oats data</h2>
+<p>As a first example we will use an oats field trial. There were 24
+varieties in 3 replicates, each consisting of 6 incomplete blocks of 4
+plots. The plots were laid out in a single row <span class="citation">(<a href="#ref-john1995">John and Williams 1995</a>; <a href="#ref-Boer2020">Boer, Piepho, and Williams 2020</a>)</span>.</p>
 <div class="sourceCode" id="cb44"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb44-1"><a href="#cb44-1" tabindex="-1"></a><span class="do">## Load data.</span></span>
-<span id="cb44-2"><a href="#cb44-2" tabindex="-1"></a><span class="fu">data</span>(john.alpha, <span class="at">package =</span> <span class="st">&quot;agridat&quot;</span>)</span>
-<span id="cb44-3"><a href="#cb44-3" tabindex="-1"></a><span class="fu">head</span>(john.alpha)</span>
+<span id="cb44-2"><a href="#cb44-2" tabindex="-1"></a><span class="fu">data</span>(oats.data)</span>
+<span id="cb44-3"><a href="#cb44-3" tabindex="-1"></a><span class="fu">head</span>(oats.data, <span class="dv">3</span>)</span>
 <span id="cb44-4"><a href="#cb44-4" tabindex="-1"></a><span class="co">#&gt;   plot rep block gen  yield row col</span></span>
 <span id="cb44-5"><a href="#cb44-5" tabindex="-1"></a><span class="co">#&gt; 1    1  R1    B1 G11 4.1172   1   1</span></span>
 <span id="cb44-6"><a href="#cb44-6" tabindex="-1"></a><span class="co">#&gt; 2    2  R1    B1 G04 4.4461   2   1</span></span>
-<span id="cb44-7"><a href="#cb44-7" tabindex="-1"></a><span class="co">#&gt; 3    3  R1    B1 G05 5.8757   3   1</span></span>
-<span id="cb44-8"><a href="#cb44-8" tabindex="-1"></a><span class="co">#&gt; 4    4  R1    B1 G22 4.5784   4   1</span></span>
-<span id="cb44-9"><a href="#cb44-9" tabindex="-1"></a><span class="co">#&gt; 5    5  R1    B2 G21 4.6540   5   1</span></span>
-<span id="cb44-10"><a href="#cb44-10" tabindex="-1"></a><span class="co">#&gt; 6    6  R1    B2 G10 4.1736   6   1</span></span></code></pre></div>
+<span id="cb44-7"><a href="#cb44-7" tabindex="-1"></a><span class="co">#&gt; 3    3  R1    B1 G05 5.8757   3   1</span></span></code></pre></div>
 <p>We will use the Linear Variance (LV) model, which is closely
 connected to the P-splines model <span class="citation">(<a href="#ref-Boer2020">Boer, Piepho, and Williams 2020</a>)</span>. First
 we need to define the precision matrix for the LV model, see Appendix in
 <span class="citation">Boer, Piepho, and Williams (<a href="#ref-Boer2020">2020</a>)</span> for details:</p>
 <div class="sourceCode" id="cb45"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb45-1"><a href="#cb45-1" tabindex="-1"></a><span class="do">## Add plot as factor.</span></span>
-<span id="cb45-2"><a href="#cb45-2" tabindex="-1"></a>john.alpha<span class="sc">$</span>plotF <span class="ot">&lt;-</span> <span class="fu">as.factor</span>(john.alpha<span class="sc">$</span>plot)</span>
+<span id="cb45-2"><a href="#cb45-2" tabindex="-1"></a>oats.data<span class="sc">$</span>plotF <span class="ot">&lt;-</span> <span class="fu">as.factor</span>(oats.data<span class="sc">$</span>plot)</span>
 <span id="cb45-3"><a href="#cb45-3" tabindex="-1"></a><span class="do">## Define the precision matrix, see eqn (A2) in Boer et al (2020).</span></span>
-<span id="cb45-4"><a href="#cb45-4" tabindex="-1"></a>N <span class="ot">&lt;-</span> <span class="fu">nrow</span>(john.alpha)</span>
+<span id="cb45-4"><a href="#cb45-4" tabindex="-1"></a>N <span class="ot">&lt;-</span> <span class="fu">nrow</span>(oats.data)</span>
 <span id="cb45-5"><a href="#cb45-5" tabindex="-1"></a>cN <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="dv">1</span> <span class="sc">/</span> <span class="fu">sqrt</span>(N <span class="sc">-</span> <span class="dv">1</span>), <span class="fu">rep</span>(<span class="dv">0</span>, N <span class="sc">-</span> <span class="dv">2</span>), <span class="dv">1</span> <span class="sc">/</span> <span class="fu">sqrt</span>(N <span class="sc">-</span> <span class="dv">1</span>))</span>
 <span id="cb45-6"><a href="#cb45-6" tabindex="-1"></a>D <span class="ot">&lt;-</span> <span class="fu">diff</span>(<span class="fu">diag</span>(N), <span class="at">diff =</span> <span class="dv">1</span>)</span>
 <span id="cb45-7"><a href="#cb45-7" tabindex="-1"></a>Delta <span class="ot">&lt;-</span> <span class="fl">0.5</span> <span class="sc">*</span> <span class="fu">crossprod</span>(D)</span>
@@ -1055,7 +1050,7 @@ arguments:</p>
 <div class="sourceCode" id="cb46"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb46-1"><a href="#cb46-1" tabindex="-1"></a>obj7 <span class="ot">&lt;-</span> <span class="fu">LMMsolve</span>(<span class="at">fixed =</span> yield <span class="sc">~</span> rep <span class="sc">+</span> gen,</span>
 <span id="cb46-2"><a href="#cb46-2" tabindex="-1"></a>                 <span class="at">random =</span> <span class="sc">~</span>plotF, </span>
 <span id="cb46-3"><a href="#cb46-3" tabindex="-1"></a>                 <span class="at">ginverse =</span> lGinv, </span>
-<span id="cb46-4"><a href="#cb46-4" tabindex="-1"></a>                 <span class="at">data =</span> john.alpha)</span></code></pre></div>
+<span id="cb46-4"><a href="#cb46-4" tabindex="-1"></a>                 <span class="at">data =</span> oats.data)</span></code></pre></div>
 <p>The absolute deviance (<span class="math inline">\(-2*logL\)</span>)
 and variances for the LV-model are</p>
 <div class="sourceCode" id="cb47"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb47-1"><a href="#cb47-1" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">deviance</span>(obj7, <span class="at">relative =</span> <span class="cn">FALSE</span>), <span class="dv">2</span>)</span>
@@ -1068,71 +1063,99 @@ and variances for the LV-model are</p>
 <span id="cb47-8"><a href="#cb47-8" tabindex="-1"></a><span class="co">#&gt;  residual     0.06</span></span></code></pre></div>
 <p>as reported in <span class="citation">Boer, Piepho, and Williams (<a href="#ref-Boer2020">2020</a>)</span>, Table 1.</p>
 </div>
-<div id="model-biomass-as-function-of-time." class="section level2" number="4.2">
-<h2><span class="header-section-number">4.2</span> Model biomass as
-function of time.</h2>
+<div id="generalized-heritability" class="section level2" number="4.2">
+<h2><span class="header-section-number">4.2</span> Generalized
+Heritability</h2>
+<p>In this section we use the same oats data set as in the previous
+section, to illustrate how the generalized heritability <span class="citation">(<a href="#ref-oakey2006">Oakey et al. 2006</a>; <a href="#ref-Rodriguez-Alvarez2018">Rodríguez-Álvarez et al.
+2018</a>)</span> can be obtained.</p>
+<p>We use the model as described in <span class="citation">Schmidt et
+al. (<a href="#ref-schmidt2019">2019</a>)</span>, with genotype
+random:</p>
+<div class="sourceCode" id="cb48"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb48-1"><a href="#cb48-1" tabindex="-1"></a>obj7b <span class="ot">&lt;-</span> <span class="fu">LMMsolve</span>(<span class="at">fixed =</span> yield <span class="sc">~</span> rep,</span>
+<span id="cb48-2"><a href="#cb48-2" tabindex="-1"></a>                 <span class="at">random =</span> <span class="sc">~</span>gen <span class="sc">+</span> rep<span class="sc">:</span>block, </span>
+<span id="cb48-3"><a href="#cb48-3" tabindex="-1"></a>                 <span class="at">data =</span> oats.data)</span></code></pre></div>
+<p>The table with effective dimensions can be obtained with the
+<code>effDim()</code> function:</p>
+<div class="sourceCode" id="cb49"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb49-1"><a href="#cb49-1" tabindex="-1"></a>EDdf <span class="ot">&lt;-</span> <span class="fu">effDim</span>(obj7b)</span>
+<span id="cb49-2"><a href="#cb49-2" tabindex="-1"></a>EDdf</span>
+<span id="cb49-3"><a href="#cb49-3" tabindex="-1"></a><span class="co">#&gt;          Term Effective Model Nominal     Ratio   Penalty</span></span>
+<span id="cb49-4"><a href="#cb49-4" tabindex="-1"></a><span class="co">#&gt; 1 (Intercept)   1.00000     1       1 1.0000000  0.000000</span></span>
+<span id="cb49-5"><a href="#cb49-5" tabindex="-1"></a><span class="co">#&gt; 2         rep   2.00000     2       2 1.0000000  0.000000</span></span>
+<span id="cb49-6"><a href="#cb49-6" tabindex="-1"></a><span class="co">#&gt; 3         gen  18.60972    24      23 0.8091184  6.998423</span></span>
+<span id="cb49-7"><a href="#cb49-7" tabindex="-1"></a><span class="co">#&gt; 4   rep:block  10.62149    18      15 0.7080994 14.239126</span></span>
+<span id="cb49-8"><a href="#cb49-8" tabindex="-1"></a><span class="co">#&gt; 5    residual  39.76878    72      69 0.5763592 12.252315</span></span></code></pre></div>
+<p>The generalized heritability for <code>gen</code> is given by the
+ratio of the Effective Dimension, divided by the nominal number of
+parameters <span class="citation">(<a href="#ref-oakey2006">Oakey et al.
+2006</a>; <a href="#ref-Rodriguez-Alvarez2018">Rodríguez-Álvarez et al.
+2018</a>)</span>:</p>
+<div class="sourceCode" id="cb50"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb50-1"><a href="#cb50-1" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">subset</span>(EDdf, Term <span class="sc">==</span> <span class="st">&quot;gen&quot;</span>)<span class="sc">$</span>Ratio, <span class="dv">3</span>)</span>
+<span id="cb50-2"><a href="#cb50-2" tabindex="-1"></a><span class="co">#&gt; [1] 0.809</span></span></code></pre></div>
+<p>and corresponds to the result for the Oakey model in <span class="citation">Schmidt et al. (<a href="#ref-schmidt2019">2019</a>)</span>.</p>
+</div>
+<div id="modelling-longitudinal-data" class="section level2" number="4.3">
+<h2><span class="header-section-number">4.3</span> Modelling
+longitudinal data</h2>
 <p>In this section we show an example of mixed model P-splines to fit
 biomass as function of time. As an example we use wheat data simulated
 with the crop growth model APSIM. This data set is included in the
 package. For details on this simulated data see <span class="citation">Bustos-Korts et al. (<a href="#ref-Bustos-Korts2019">2019</a>)</span>.</p>
-<div class="sourceCode" id="cb48"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb48-1"><a href="#cb48-1" tabindex="-1"></a><span class="fu">data</span>(APSIMdat)</span>
-<span id="cb48-2"><a href="#cb48-2" tabindex="-1"></a><span class="fu">head</span>(APSIMdat)</span>
-<span id="cb48-3"><a href="#cb48-3" tabindex="-1"></a><span class="co">#&gt;            env geno das   biomass</span></span>
-<span id="cb48-4"><a href="#cb48-4" tabindex="-1"></a><span class="co">#&gt; 1 Emerald_1993 g001  20  65.57075</span></span>
-<span id="cb48-5"><a href="#cb48-5" tabindex="-1"></a><span class="co">#&gt; 2 Emerald_1993 g001  21  60.70499</span></span>
-<span id="cb48-6"><a href="#cb48-6" tabindex="-1"></a><span class="co">#&gt; 3 Emerald_1993 g001  22  74.06247</span></span>
-<span id="cb48-7"><a href="#cb48-7" tabindex="-1"></a><span class="co">#&gt; 4 Emerald_1993 g001  23  63.73951</span></span>
-<span id="cb48-8"><a href="#cb48-8" tabindex="-1"></a><span class="co">#&gt; 5 Emerald_1993 g001  24 101.88005</span></span>
-<span id="cb48-9"><a href="#cb48-9" tabindex="-1"></a><span class="co">#&gt; 6 Emerald_1993 g001  25  96.84971</span></span></code></pre></div>
+<div class="sourceCode" id="cb51"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb51-1"><a href="#cb51-1" tabindex="-1"></a><span class="fu">data</span>(APSIMdat)</span>
+<span id="cb51-2"><a href="#cb51-2" tabindex="-1"></a><span class="fu">head</span>(APSIMdat, <span class="dv">3</span>)</span>
+<span id="cb51-3"><a href="#cb51-3" tabindex="-1"></a><span class="co">#&gt;            env geno das  biomass</span></span>
+<span id="cb51-4"><a href="#cb51-4" tabindex="-1"></a><span class="co">#&gt; 1 Emerald_1993 g001  20 65.57075</span></span>
+<span id="cb51-5"><a href="#cb51-5" tabindex="-1"></a><span class="co">#&gt; 2 Emerald_1993 g001  21 60.70499</span></span>
+<span id="cb51-6"><a href="#cb51-6" tabindex="-1"></a><span class="co">#&gt; 3 Emerald_1993 g001  22 74.06247</span></span></code></pre></div>
 <p>The first column is the environment, Emerald in 1993, the second
 column the simulated genotype (g001), the third column is days after
 sowing (das), and the last column is the simulated biomass with medium
 measurement error.</p>
 <p>The model can be fitted with</p>
-<div class="sourceCode" id="cb49"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb49-1"><a href="#cb49-1" tabindex="-1"></a>obj8 <span class="ot">&lt;-</span> <span class="fu">LMMsolve</span>(<span class="at">fixed =</span> biomass <span class="sc">~</span> <span class="dv">1</span>,</span>
-<span id="cb49-2"><a href="#cb49-2" tabindex="-1"></a>                 <span class="at">spline =</span> <span class="sc">~</span><span class="fu">spl1D</span>(<span class="at">x =</span> das, <span class="at">nseg =</span> <span class="dv">50</span>), </span>
-<span id="cb49-3"><a href="#cb49-3" tabindex="-1"></a>                 <span class="at">data =</span> APSIMdat)</span></code></pre></div>
+<div class="sourceCode" id="cb52"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb52-1"><a href="#cb52-1" tabindex="-1"></a>obj8 <span class="ot">&lt;-</span> <span class="fu">LMMsolve</span>(<span class="at">fixed =</span> biomass <span class="sc">~</span> <span class="dv">1</span>,</span>
+<span id="cb52-2"><a href="#cb52-2" tabindex="-1"></a>                 <span class="at">spline =</span> <span class="sc">~</span><span class="fu">spl1D</span>(<span class="at">x =</span> das, <span class="at">nseg =</span> <span class="dv">50</span>), </span>
+<span id="cb52-3"><a href="#cb52-3" tabindex="-1"></a>                 <span class="at">data =</span> APSIMdat)</span></code></pre></div>
 <p>The effective dimensions are:</p>
-<div class="sourceCode" id="cb50"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb50-1"><a href="#cb50-1" tabindex="-1"></a><span class="fu">summary</span>(obj8)</span>
-<span id="cb50-2"><a href="#cb50-2" tabindex="-1"></a><span class="co">#&gt; Table with effective dimensions and penalties: </span></span>
-<span id="cb50-3"><a href="#cb50-3" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb50-4"><a href="#cb50-4" tabindex="-1"></a><span class="co">#&gt;         Term Effective Model Nominal Ratio Penalty</span></span>
-<span id="cb50-5"><a href="#cb50-5" tabindex="-1"></a><span class="co">#&gt;  (Intercept)      1.00     1       1  1.00    0.00</span></span>
-<span id="cb50-6"><a href="#cb50-6" tabindex="-1"></a><span class="co">#&gt;     lin(das)      1.00     1       1  1.00    0.00</span></span>
-<span id="cb50-7"><a href="#cb50-7" tabindex="-1"></a><span class="co">#&gt;       s(das)      6.46    53      51  0.13    0.01</span></span>
-<span id="cb50-8"><a href="#cb50-8" tabindex="-1"></a><span class="co">#&gt;     residual    112.54   121     119  0.95    0.00</span></span>
-<span id="cb50-9"><a href="#cb50-9" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb50-10"><a href="#cb50-10" tabindex="-1"></a><span class="co">#&gt;  Total Effective Dimension: 121</span></span></code></pre></div>
+<div class="sourceCode" id="cb53"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb53-1"><a href="#cb53-1" tabindex="-1"></a><span class="fu">summary</span>(obj8)</span>
+<span id="cb53-2"><a href="#cb53-2" tabindex="-1"></a><span class="co">#&gt; Table with effective dimensions and penalties: </span></span>
+<span id="cb53-3"><a href="#cb53-3" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb53-4"><a href="#cb53-4" tabindex="-1"></a><span class="co">#&gt;         Term Effective Model Nominal Ratio Penalty</span></span>
+<span id="cb53-5"><a href="#cb53-5" tabindex="-1"></a><span class="co">#&gt;  (Intercept)      1.00     1       1  1.00    0.00</span></span>
+<span id="cb53-6"><a href="#cb53-6" tabindex="-1"></a><span class="co">#&gt;     lin(das)      1.00     1       1  1.00    0.00</span></span>
+<span id="cb53-7"><a href="#cb53-7" tabindex="-1"></a><span class="co">#&gt;       s(das)      6.46    53      51  0.13    0.01</span></span>
+<span id="cb53-8"><a href="#cb53-8" tabindex="-1"></a><span class="co">#&gt;     residual    112.54   121     119  0.95    0.00</span></span>
+<span id="cb53-9"><a href="#cb53-9" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb53-10"><a href="#cb53-10" tabindex="-1"></a><span class="co">#&gt;  Total Effective Dimension: 121</span></span></code></pre></div>
 <p>The fitted smooth trend can be obtained as explained before:</p>
-<div class="sourceCode" id="cb51"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb51-1"><a href="#cb51-1" tabindex="-1"></a>das_range <span class="ot">&lt;-</span> <span class="fu">range</span>(APSIMdat<span class="sc">$</span>das)</span>
-<span id="cb51-2"><a href="#cb51-2" tabindex="-1"></a>newdat <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(<span class="at">das=</span><span class="fu">seq</span>(das_range[<span class="dv">1</span>], das_range[<span class="dv">2</span>], <span class="at">length =</span> <span class="dv">300</span>))</span>
-<span id="cb51-3"><a href="#cb51-3" tabindex="-1"></a>pred8 <span class="ot">&lt;-</span> <span class="fu">predict</span>(obj8, <span class="at">newdata =</span> newdat, <span class="at">se.fit =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb51-4"><a href="#cb51-4" tabindex="-1"></a><span class="fu">ggplot</span>(<span class="at">data =</span> APSIMdat, <span class="fu">aes</span>(<span class="at">x =</span> das, <span class="at">y =</span> biomass)) <span class="sc">+</span></span>
-<span id="cb51-5"><a href="#cb51-5" tabindex="-1"></a>  <span class="fu">geom_point</span>(<span class="at">size =</span> <span class="fl">1.0</span>) <span class="sc">+</span></span>
-<span id="cb51-6"><a href="#cb51-6" tabindex="-1"></a>  <span class="fu">geom_line</span>(<span class="at">data =</span> pred8, <span class="fu">aes</span>(<span class="at">y =</span> ypred), <span class="at">color =</span> <span class="st">&quot;blue&quot;</span>, <span class="at">linewidth =</span> <span class="dv">1</span>) <span class="sc">+</span></span>
-<span id="cb51-7"><a href="#cb51-7" tabindex="-1"></a>  <span class="fu">geom_ribbon</span>(<span class="at">data =</span> pred8, <span class="fu">aes</span>(<span class="at">x =</span> das,<span class="at">ymin =</span> ypred<span class="dv">-2</span><span class="sc">*</span>se, <span class="at">ymax =</span> ypred<span class="sc">+</span><span class="dv">2</span><span class="sc">*</span>se),</span>
-<span id="cb51-8"><a href="#cb51-8" tabindex="-1"></a>              <span class="at">alpha =</span> <span class="fl">0.2</span>, <span class="at">inherit.aes =</span> <span class="cn">FALSE</span>) <span class="sc">+</span> </span>
-<span id="cb51-9"><a href="#cb51-9" tabindex="-1"></a>    <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">&quot;APSIM biomass as function of time&quot;</span>, </span>
-<span id="cb51-10"><a href="#cb51-10" tabindex="-1"></a>       <span class="at">x =</span> <span class="st">&quot;days after sowing&quot;</span>, <span class="at">y =</span> <span class="st">&quot;biomass (kg)&quot;</span>) <span class="sc">+</span></span>
-<span id="cb51-11"><a href="#cb51-11" tabindex="-1"></a>  <span class="fu">theme_bw</span>()</span></code></pre></div>
+<div class="sourceCode" id="cb54"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb54-1"><a href="#cb54-1" tabindex="-1"></a>das_range <span class="ot">&lt;-</span> <span class="fu">range</span>(APSIMdat<span class="sc">$</span>das)</span>
+<span id="cb54-2"><a href="#cb54-2" tabindex="-1"></a>newdat <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(<span class="at">das=</span><span class="fu">seq</span>(das_range[<span class="dv">1</span>], das_range[<span class="dv">2</span>], <span class="at">length =</span> <span class="dv">300</span>))</span>
+<span id="cb54-3"><a href="#cb54-3" tabindex="-1"></a>pred8 <span class="ot">&lt;-</span> <span class="fu">predict</span>(obj8, <span class="at">newdata =</span> newdat, <span class="at">se.fit =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb54-4"><a href="#cb54-4" tabindex="-1"></a><span class="fu">ggplot</span>(<span class="at">data =</span> APSIMdat, <span class="fu">aes</span>(<span class="at">x =</span> das, <span class="at">y =</span> biomass)) <span class="sc">+</span></span>
+<span id="cb54-5"><a href="#cb54-5" tabindex="-1"></a>  <span class="fu">geom_point</span>(<span class="at">size =</span> <span class="fl">1.0</span>) <span class="sc">+</span></span>
+<span id="cb54-6"><a href="#cb54-6" tabindex="-1"></a>  <span class="fu">geom_line</span>(<span class="at">data =</span> pred8, <span class="fu">aes</span>(<span class="at">y =</span> ypred), <span class="at">color =</span> <span class="st">&quot;blue&quot;</span>, <span class="at">linewidth =</span> <span class="dv">1</span>) <span class="sc">+</span></span>
+<span id="cb54-7"><a href="#cb54-7" tabindex="-1"></a>  <span class="fu">geom_ribbon</span>(<span class="at">data =</span> pred8, <span class="fu">aes</span>(<span class="at">x =</span> das,<span class="at">ymin =</span> ypred<span class="dv">-2</span><span class="sc">*</span>se, <span class="at">ymax =</span> ypred<span class="sc">+</span><span class="dv">2</span><span class="sc">*</span>se),</span>
+<span id="cb54-8"><a href="#cb54-8" tabindex="-1"></a>              <span class="at">alpha =</span> <span class="fl">0.2</span>, <span class="at">inherit.aes =</span> <span class="cn">FALSE</span>) <span class="sc">+</span> </span>
+<span id="cb54-9"><a href="#cb54-9" tabindex="-1"></a>    <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">&quot;APSIM biomass as function of time&quot;</span>, </span>
+<span id="cb54-10"><a href="#cb54-10" tabindex="-1"></a>       <span class="at">x =</span> <span class="st">&quot;days after sowing&quot;</span>, <span class="at">y =</span> <span class="st">&quot;biomass (kg)&quot;</span>) <span class="sc">+</span></span>
+<span id="cb54-11"><a href="#cb54-11" tabindex="-1"></a>  <span class="fu">theme_bw</span>()</span></code></pre></div>
 <p><img role="img" src="data:image/png;base64,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" /><!-- --></p>
 <p>The growth rate (first derivative) as function of time can be
-obtained using <code>deriv = das</code> in the <code>predict()</code>
-function:</p>
-<div class="sourceCode" id="cb52"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb52-1"><a href="#cb52-1" tabindex="-1"></a>plotDatDt <span class="ot">&lt;-</span> <span class="fu">predict</span>(obj8, <span class="at">newdata =</span> newdat, <span class="at">se.fit=</span><span class="cn">TRUE</span>, <span class="at">deriv=</span><span class="st">&quot;das&quot;</span>)</span>
-<span id="cb52-2"><a href="#cb52-2" tabindex="-1"></a></span>
-<span id="cb52-3"><a href="#cb52-3" tabindex="-1"></a><span class="fu">ggplot</span>(<span class="at">data =</span> plotDatDt, <span class="fu">aes</span>(<span class="at">x =</span> das, <span class="at">y =</span> ypred)) <span class="sc">+</span></span>
-<span id="cb52-4"><a href="#cb52-4" tabindex="-1"></a>  <span class="fu">geom_line</span>(<span class="at">color =</span> <span class="st">&quot;blue&quot;</span>, <span class="at">linewidth =</span> <span class="dv">1</span>) <span class="sc">+</span></span>
-<span id="cb52-5"><a href="#cb52-5" tabindex="-1"></a>  <span class="fu">geom_ribbon</span>(<span class="fu">aes</span>(<span class="at">x=</span>das, <span class="at">ymin =</span> ypred<span class="dv">-2</span><span class="sc">*</span>se, <span class="at">ymax =</span> ypred<span class="sc">+</span><span class="dv">2</span><span class="sc">*</span>se),</span>
-<span id="cb52-6"><a href="#cb52-6" tabindex="-1"></a>              <span class="at">alpha=</span><span class="fl">0.2</span>, <span class="at">inherit.aes =</span> <span class="cn">FALSE</span>) <span class="sc">+</span>  </span>
-<span id="cb52-7"><a href="#cb52-7" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">&quot;APSIM growth rate as function of time&quot;</span>, </span>
-<span id="cb52-8"><a href="#cb52-8" tabindex="-1"></a>       <span class="at">x =</span> <span class="st">&quot;days after sowing&quot;</span>, <span class="at">y =</span> <span class="st">&quot;growth rate (kg/day)&quot;</span>) <span class="sc">+</span></span>
-<span id="cb52-9"><a href="#cb52-9" tabindex="-1"></a>  <span class="fu">theme_bw</span>()</span></code></pre></div>
+obtained using the <code>deriv</code> argument in the
+<code>predict()</code> function:</p>
+<div class="sourceCode" id="cb55"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb55-1"><a href="#cb55-1" tabindex="-1"></a>plotDatDt <span class="ot">&lt;-</span> <span class="fu">predict</span>(obj8, <span class="at">newdata =</span> newdat, <span class="at">se.fit=</span><span class="cn">TRUE</span>, <span class="at">deriv=</span><span class="st">&quot;das&quot;</span>)</span>
+<span id="cb55-2"><a href="#cb55-2" tabindex="-1"></a></span>
+<span id="cb55-3"><a href="#cb55-3" tabindex="-1"></a><span class="fu">ggplot</span>(<span class="at">data =</span> plotDatDt, <span class="fu">aes</span>(<span class="at">x =</span> das, <span class="at">y =</span> ypred)) <span class="sc">+</span></span>
+<span id="cb55-4"><a href="#cb55-4" tabindex="-1"></a>  <span class="fu">geom_line</span>(<span class="at">color =</span> <span class="st">&quot;blue&quot;</span>, <span class="at">linewidth =</span> <span class="dv">1</span>) <span class="sc">+</span></span>
+<span id="cb55-5"><a href="#cb55-5" tabindex="-1"></a>  <span class="fu">geom_ribbon</span>(<span class="fu">aes</span>(<span class="at">x=</span>das, <span class="at">ymin =</span> ypred<span class="dv">-2</span><span class="sc">*</span>se, <span class="at">ymax =</span> ypred<span class="sc">+</span><span class="dv">2</span><span class="sc">*</span>se),</span>
+<span id="cb55-6"><a href="#cb55-6" tabindex="-1"></a>              <span class="at">alpha=</span><span class="fl">0.2</span>, <span class="at">inherit.aes =</span> <span class="cn">FALSE</span>) <span class="sc">+</span>  </span>
+<span id="cb55-7"><a href="#cb55-7" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">&quot;APSIM growth rate as function of time&quot;</span>, </span>
+<span id="cb55-8"><a href="#cb55-8" tabindex="-1"></a>       <span class="at">x =</span> <span class="st">&quot;days after sowing&quot;</span>, <span class="at">y =</span> <span class="st">&quot;growth rate (kg/day)&quot;</span>) <span class="sc">+</span></span>
+<span id="cb55-9"><a href="#cb55-9" tabindex="-1"></a>  <span class="fu">theme_bw</span>()</span></code></pre></div>
 <p><img role="img" src="data:image/png;base64,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" /><!-- --></p>
 </div>
-<div id="qtl-mapping-with-ibd-probabilities." class="section level2" number="4.3">
-<h2><span class="header-section-number">4.3</span> QTL mapping with IBD
-probabilities.</h2>
+<div id="qtl-mapping-using-ibds" class="section level2" number="4.4">
+<h2><span class="header-section-number">4.4</span> QTL mapping using
+IBDs</h2>
 <p>In QTL-mapping for multiparental populations the Identity-By-Descent
 (IBD) probabilities are used as genetic predictors in the mixed model
 <span class="citation">(<a href="#ref-Li2021">Li et al.
@@ -1142,49 +1165,46 @@ AxC. AxB is a population of 100 Doubled Haploids (DH), AxC of 80 DHs.
 The probabilities, pA, pB, and pC, are for a position on the genome
 close to a simulated QTL. This simulated data is included in the
 package.</p>
-<div class="sourceCode" id="cb53"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb53-1"><a href="#cb53-1" tabindex="-1"></a><span class="do">## Load data for multiparental population.</span></span>
-<span id="cb53-2"><a href="#cb53-2" tabindex="-1"></a><span class="fu">data</span>(multipop)</span>
-<span id="cb53-3"><a href="#cb53-3" tabindex="-1"></a><span class="fu">head</span>(multipop)</span>
-<span id="cb53-4"><a href="#cb53-4" tabindex="-1"></a><span class="co">#&gt;   cross     ind         pA         pB pC    pheno</span></span>
-<span id="cb53-5"><a href="#cb53-5" tabindex="-1"></a><span class="co">#&gt; 1   AxB AxB0001 0.17258816 0.82741184  0 9.890637</span></span>
-<span id="cb53-6"><a href="#cb53-6" tabindex="-1"></a><span class="co">#&gt; 2   AxB AxB0002 0.82170793 0.17829207  0 6.546568</span></span>
-<span id="cb53-7"><a href="#cb53-7" tabindex="-1"></a><span class="co">#&gt; 3   AxB AxB0003 0.95968439 0.04031561  0 7.899249</span></span>
-<span id="cb53-8"><a href="#cb53-8" tabindex="-1"></a><span class="co">#&gt; 4   AxB AxB0004 0.96564081 0.03435919  0 4.462866</span></span>
-<span id="cb53-9"><a href="#cb53-9" tabindex="-1"></a><span class="co">#&gt; 5   AxB AxB0005 0.04838734 0.95161266  0 5.207757</span></span>
-<span id="cb53-10"><a href="#cb53-10" tabindex="-1"></a><span class="co">#&gt; 6   AxB AxB0006 0.95968439 0.04031561  0 5.265580</span></span></code></pre></div>
+<div class="sourceCode" id="cb56"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb56-1"><a href="#cb56-1" tabindex="-1"></a><span class="do">## Load data for multiparental population.</span></span>
+<span id="cb56-2"><a href="#cb56-2" tabindex="-1"></a><span class="fu">data</span>(multipop)</span>
+<span id="cb56-3"><a href="#cb56-3" tabindex="-1"></a><span class="fu">head</span>(multipop, <span class="dv">3</span>)</span>
+<span id="cb56-4"><a href="#cb56-4" tabindex="-1"></a><span class="co">#&gt;   cross     ind        pA         pB pC    pheno</span></span>
+<span id="cb56-5"><a href="#cb56-5" tabindex="-1"></a><span class="co">#&gt; 1   AxB AxB0001 0.1725882 0.82741184  0 9.890637</span></span>
+<span id="cb56-6"><a href="#cb56-6" tabindex="-1"></a><span class="co">#&gt; 2   AxB AxB0002 0.8217079 0.17829207  0 6.546568</span></span>
+<span id="cb56-7"><a href="#cb56-7" tabindex="-1"></a><span class="co">#&gt; 3   AxB AxB0003 0.9596844 0.04031561  0 7.899249</span></span></code></pre></div>
 <p>The residual (genetic) variances for the two populations can be
 different. Therefore we need to allow for heterogeneous residual
 variances, which can be defined by using the <code>residual</code>
 argument in <code>LMMsolve</code>:</p>
-<div class="sourceCode" id="cb54"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb54-1"><a href="#cb54-1" tabindex="-1"></a><span class="do">## Fit null model.</span></span>
-<span id="cb54-2"><a href="#cb54-2" tabindex="-1"></a>obj9 <span class="ot">&lt;-</span> <span class="fu">LMMsolve</span>(<span class="at">fixed =</span> pheno <span class="sc">~</span> cross, </span>
-<span id="cb54-3"><a href="#cb54-3" tabindex="-1"></a>                 <span class="at">residual =</span> <span class="sc">~</span>cross, </span>
-<span id="cb54-4"><a href="#cb54-4" tabindex="-1"></a>                 <span class="at">data =</span> multipop)</span>
-<span id="cb54-5"><a href="#cb54-5" tabindex="-1"></a>dev0 <span class="ot">&lt;-</span> <span class="fu">deviance</span>(obj9, <span class="at">relative =</span> <span class="cn">FALSE</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb57"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb57-1"><a href="#cb57-1" tabindex="-1"></a><span class="do">## Fit null model.</span></span>
+<span id="cb57-2"><a href="#cb57-2" tabindex="-1"></a>obj9 <span class="ot">&lt;-</span> <span class="fu">LMMsolve</span>(<span class="at">fixed =</span> pheno <span class="sc">~</span> cross, </span>
+<span id="cb57-3"><a href="#cb57-3" tabindex="-1"></a>                 <span class="at">residual =</span> <span class="sc">~</span>cross, </span>
+<span id="cb57-4"><a href="#cb57-4" tabindex="-1"></a>                 <span class="at">data =</span> multipop)</span>
+<span id="cb57-5"><a href="#cb57-5" tabindex="-1"></a>dev0 <span class="ot">&lt;-</span> <span class="fu">deviance</span>(obj9, <span class="at">relative =</span> <span class="cn">FALSE</span>)</span></code></pre></div>
 <p>The QTL-probabilities are defined by the columns pA, pB, pC, and can
 be included in the random part of the mixed model by using the
 <code>group</code> argument:</p>
-<div class="sourceCode" id="cb55"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb55-1"><a href="#cb55-1" tabindex="-1"></a><span class="do">## Fit alternative model - include QTL with probabilities defined in columns 3:5 </span></span>
-<span id="cb55-2"><a href="#cb55-2" tabindex="-1"></a>lGrp <span class="ot">&lt;-</span> <span class="fu">list</span>(<span class="at">QTL =</span> <span class="dv">3</span><span class="sc">:</span><span class="dv">5</span>)</span>
-<span id="cb55-3"><a href="#cb55-3" tabindex="-1"></a>obj10 <span class="ot">&lt;-</span> <span class="fu">LMMsolve</span>(<span class="at">fixed =</span> pheno <span class="sc">~</span> cross, </span>
-<span id="cb55-4"><a href="#cb55-4" tabindex="-1"></a>                 <span class="at">group =</span> lGrp,</span>
-<span id="cb55-5"><a href="#cb55-5" tabindex="-1"></a>                 <span class="at">random =</span> <span class="sc">~</span><span class="fu">grp</span>(QTL),</span>
-<span id="cb55-6"><a href="#cb55-6" tabindex="-1"></a>                 <span class="at">residual =</span> <span class="sc">~</span>cross,</span>
-<span id="cb55-7"><a href="#cb55-7" tabindex="-1"></a>                 <span class="at">data =</span> multipop) </span>
-<span id="cb55-8"><a href="#cb55-8" tabindex="-1"></a>dev1 <span class="ot">&lt;-</span> <span class="fu">deviance</span>(obj10, <span class="at">relative =</span> <span class="cn">FALSE</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb58"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb58-1"><a href="#cb58-1" tabindex="-1"></a><span class="do">## Fit alternative model - include QTL with probabilities defined in columns 3:5 </span></span>
+<span id="cb58-2"><a href="#cb58-2" tabindex="-1"></a>lGrp <span class="ot">&lt;-</span> <span class="fu">list</span>(<span class="at">QTL =</span> <span class="dv">3</span><span class="sc">:</span><span class="dv">5</span>)</span>
+<span id="cb58-3"><a href="#cb58-3" tabindex="-1"></a>obj10 <span class="ot">&lt;-</span> <span class="fu">LMMsolve</span>(<span class="at">fixed =</span> pheno <span class="sc">~</span> cross, </span>
+<span id="cb58-4"><a href="#cb58-4" tabindex="-1"></a>                 <span class="at">group =</span> lGrp,</span>
+<span id="cb58-5"><a href="#cb58-5" tabindex="-1"></a>                 <span class="at">random =</span> <span class="sc">~</span><span class="fu">grp</span>(QTL),</span>
+<span id="cb58-6"><a href="#cb58-6" tabindex="-1"></a>                 <span class="at">residual =</span> <span class="sc">~</span>cross,</span>
+<span id="cb58-7"><a href="#cb58-7" tabindex="-1"></a>                 <span class="at">data =</span> multipop) </span>
+<span id="cb58-8"><a href="#cb58-8" tabindex="-1"></a>dev1 <span class="ot">&lt;-</span> <span class="fu">deviance</span>(obj10, <span class="at">relative =</span> <span class="cn">FALSE</span>)</span></code></pre></div>
 <p>The approximate <span class="math inline">\(-log10(p)\)</span> value
 is given by</p>
-<div class="sourceCode" id="cb56"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb56-1"><a href="#cb56-1" tabindex="-1"></a><span class="do">## Deviance difference between null and alternative model.</span></span>
-<span id="cb56-2"><a href="#cb56-2" tabindex="-1"></a>dev <span class="ot">&lt;-</span> dev0 <span class="sc">-</span> dev1</span>
-<span id="cb56-3"><a href="#cb56-3" tabindex="-1"></a><span class="do">## Calculate approximate p-value. </span></span>
-<span id="cb56-4"><a href="#cb56-4" tabindex="-1"></a>minlog10p <span class="ot">&lt;-</span> <span class="sc">-</span><span class="fu">log10</span>(<span class="fl">0.5</span> <span class="sc">*</span> <span class="fu">pchisq</span>(dev, <span class="dv">1</span>, <span class="at">lower.tail =</span> <span class="cn">FALSE</span>))</span>
-<span id="cb56-5"><a href="#cb56-5" tabindex="-1"></a><span class="fu">round</span>(minlog10p, <span class="dv">2</span>)</span>
-<span id="cb56-6"><a href="#cb56-6" tabindex="-1"></a><span class="co">#&gt; [1] 8.76</span></span></code></pre></div>
+<div class="sourceCode" id="cb59"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb59-1"><a href="#cb59-1" tabindex="-1"></a><span class="do">## Deviance difference between null and alternative model.</span></span>
+<span id="cb59-2"><a href="#cb59-2" tabindex="-1"></a>dev <span class="ot">&lt;-</span> dev0 <span class="sc">-</span> dev1</span>
+<span id="cb59-3"><a href="#cb59-3" tabindex="-1"></a><span class="do">## Calculate approximate p-value. </span></span>
+<span id="cb59-4"><a href="#cb59-4" tabindex="-1"></a>minlog10p <span class="ot">&lt;-</span> <span class="sc">-</span><span class="fu">log10</span>(<span class="fl">0.5</span> <span class="sc">*</span> <span class="fu">pchisq</span>(dev, <span class="dv">1</span>, <span class="at">lower.tail =</span> <span class="cn">FALSE</span>))</span>
+<span id="cb59-5"><a href="#cb59-5" tabindex="-1"></a><span class="fu">round</span>(minlog10p, <span class="dv">2</span>)</span>
+<span id="cb59-6"><a href="#cb59-6" tabindex="-1"></a><span class="co">#&gt; [1] 8.76</span></span></code></pre></div>
 <p>The estimated QTL effects of the parents A, B, and C are given
 by:</p>
-<div class="sourceCode" id="cb57"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb57-1"><a href="#cb57-1" tabindex="-1"></a><span class="fu">coef</span>(obj10)<span class="sc">$</span>QTL</span>
-<span id="cb57-2"><a href="#cb57-2" tabindex="-1"></a><span class="co">#&gt;     QTL_pA     QTL_pB     QTL_pC </span></span>
-<span id="cb57-3"><a href="#cb57-3" tabindex="-1"></a><span class="co">#&gt; -1.2676362  0.6829275  0.5847088</span></span></code></pre></div>
+<div class="sourceCode" id="cb60"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb60-1"><a href="#cb60-1" tabindex="-1"></a><span class="fu">coef</span>(obj10)<span class="sc">$</span>QTL</span>
+<span id="cb60-2"><a href="#cb60-2" tabindex="-1"></a><span class="co">#&gt;     QTL_pA     QTL_pB     QTL_pC </span></span>
+<span id="cb60-3"><a href="#cb60-3" tabindex="-1"></a><span class="co">#&gt; -1.2676362  0.6829275  0.5847088</span></span></code></pre></div>
 </div>
 </div>
 <div id="references" class="section level1 unnumbered">
@@ -1218,12 +1238,6 @@ Cressie, Noel, Matthew Sainsbury-Dale, and Andrew Zammit-Mangion. 2022.
 <span>“Basis-Function Models in Spatial Statistics.”</span> <em>Annual
 Review of Statistics and Its Application</em> 9 (1): 373–400. <a href="https://doi.org/10.1146/annurev-statistics-040120-020733">https://doi.org/10.1146/annurev-statistics-040120-020733</a>.
 </div>
-<div id="ref-Eddelbuettel2018" class="csl-entry">
-Eddelbuettel, Dirk, and James Joseph Balamuta. 2018. <span>“Extending
-<span>R</span> with <span>C</span>++: A Brief Introduction to
-<span>R</span>cpp.”</span> <em>The American Statistician</em> 72 (1):
-28–36. <a href="https://doi.org/10.1080/00031305.2017.1375990">https://doi.org/10.1080/00031305.2017.1375990</a>.
-</div>
 <div id="ref-Eilers1996" class="csl-entry">
 Eilers, PHC, and BD Marx. 1996. <span>“<span class="nocase">Flexible
 smoothing with B-splines and penalties</span>.”</span> <em>Stat.
@@ -1237,7 +1251,11 @@ Fahrmeir, Thomas Kneib, Stefan Lang, and Brian Marx. 2013.
 <div id="ref-Furrer2010" class="csl-entry">
 Furrer, R, and SR Sain. 2010. <span>“<span class="nocase">spam: A sparse
 matrix R package with emphasis on MCMC methods for Gaussian Markov
-random fields</span>.”</span> <em>J. Stat. Softw.</em> <a href="https://core.ac.uk/download/pdf/6340272.pdf">https://core.ac.uk/download/pdf/6340272.pdf</a>.
+random fields</span>.”</span> <em>J. Stat. Softw.</em> <a href="https://doi.org/10.18637/jss.v036.i10">https://doi.org/10.18637/jss.v036.i10</a>.
+</div>
+<div id="ref-john1995" class="csl-entry">
+John, J. A., and E. R. Williams. 1995. <em>Cyclic and Computer Generated
+Designs</em>. Chapman; Hall, London.
 </div>
 <div id="ref-Li2021" class="csl-entry">
 Li, Wenhao, Martin P. Boer, Chaozhi Zheng, Ronny V. L. Joosen, and Fred
@@ -1246,9 +1264,21 @@ model approach for QTL mapping in multiparental
 populations</span>.”</span> <em>Theor. Appl. Genet. 2021</em> 1
 (August): 1–18. <a href="https://doi.org/10.1007/S00122-021-03919-7">https://doi.org/10.1007/S00122-021-03919-7</a>.
 </div>
+<div id="ref-oakey2006" class="csl-entry">
+Oakey, Helena, Arūnas Verbyla, Wayne Pitchford, Brian Cullis, and Haydn
+Kuchel. 2006. <span>“Joint Modeling of Additive and Non-Additive Genetic
+Line Effects in Single Field Trials.”</span> <em>Theoretical and Applied
+Genetics</em> 113 (5): 809–19. <a href="https://doi.org/10.1007/s00122-006-0333-z">https://doi.org/10.1007/s00122-006-0333-z</a>.
+</div>
 <div id="ref-Patterson1971" class="csl-entry">
 Patterson, HD, and R Thompson. 1971. <span>“<span class="nocase">Recovery of inter-block information when block sizes are
 unequal</span>.”</span> <em>Biometrika</em>. <a href="https://doi.org/10.1093/biomet/58.3.545">https://doi.org/10.1093/biomet/58.3.545</a>.
+</div>
+<div id="ref-Rodriguez-Alvarez2018" class="csl-entry">
+Rodríguez-Álvarez, María Xosé, Martin P. Boer, Fred A. van Eeuwijk, and
+Paul H. C. Eilers. 2018. <span>“<span class="nocase">Correcting for
+spatial heterogeneity in plant breeding experiments with
+P-splines</span>.”</span> <em>Spat. Stat.</em> 23 (March): 52–71. <a href="https://doi.org/10.1016/J.SPASTA.2017.10.003">https://doi.org/10.1016/J.SPASTA.2017.10.003</a>.
 </div>
 <div id="ref-Rodriguez-Alvarez2015" class="csl-entry">
 Rodríguez-Álvarez, María Xosé, Dae Jin Lee, Thomas Kneib, María Durbán,
@@ -1256,10 +1286,10 @@ and Paul Eilers. 2015. <span>“<span class="nocase">Fast smoothing
 parameter separation in multidimensional generalized P-splines: the SAP
 algorithm</span>.”</span> <em>Stat. Comput.</em> 25 (5): 941–57. <a href="https://doi.org/10.1007/S11222-014-9464-2">https://doi.org/10.1007/S11222-014-9464-2</a>.
 </div>
-<div id="ref-Smith1995" class="csl-entry">
-Smith, S. P. 1995. <span>“<span class="nocase">Differentiation of the
-Cholesky Algorithm</span>.”</span> <em>J. Comput. Graph. Stat.</em> 4
-(2): 134. <a href="https://doi.org/10.2307/1390762">https://doi.org/10.2307/1390762</a>.
+<div id="ref-schmidt2019" class="csl-entry">
+Schmidt, Paul, Jens Hartung, Jörn Bennewitz, and Hans-Peter Piepho.
+2019. <span>“Heritability in Plant Breeding on a Genotype-Difference
+Basis.”</span> <em>Genetics</em> 212 (4): 991–1008. <a href="https://doi.org/10.1534/genetics.119.302134">https://doi.org/10.1534/genetics.119.302134</a>.
 </div>
 </div>
 </div>

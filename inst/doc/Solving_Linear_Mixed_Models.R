@@ -177,7 +177,7 @@ ggplot(usa) +
 
 ## ----SeaSurfaceTemp-----------------------------------------------------------
 data(SeaSurfaceTemp)
-head(SeaSurfaceTemp, 5)
+head(SeaSurfaceTemp, 3)
 table(SeaSurfaceTemp$type)
 
 ## ----convert_and_split--------------------------------------------------------
@@ -307,7 +307,7 @@ nsucces <- sapply(x, FUN=function(x) {
                 })
 dat <- data.frame(x = x, succes = nsucces, 
                          failure= sz - nsucces)
-head(dat, 5)
+head(dat, 3)
 
 ## ----binomial_solve-----------------------------------------------------------
 obj3 <- LMMsolve(fixed = cbind(succes, failure) ~ 1,
@@ -354,7 +354,7 @@ multiNom <- t(sapply(x, FUN=
                       } ))
 colnames(multiNom) <- names(mu)
 dat <- data.frame(x, multiNom)
-head(dat, 4)
+head(dat, 3)
 
 ## ----multinomialfit-----------------------------------------------------------
 obj <- LMMsolve(fixed = cbind(A,B,C,D) ~ 1,
@@ -371,7 +371,7 @@ dat_fr <- data.frame(x, fr)
 x0 <- seq(0, 1, by = 0.01)
 newdat <- data.frame(x = x0)
 pred <- predict(obj, newdata = newdat)
-head(pred)
+head(pred, 3)
 
 ## ----makePlot-----------------------------------------------------------------
 library(tidyr)
@@ -390,14 +390,14 @@ p1
 
 ## ----oatsdata-----------------------------------------------------------------
 ## Load data.
-data(john.alpha, package = "agridat")
-head(john.alpha)
+data(oats.data)
+head(oats.data, 3)
 
 ## ----define LVmodel-----------------------------------------------------------
 ## Add plot as factor.
-john.alpha$plotF <- as.factor(john.alpha$plot)
+oats.data$plotF <- as.factor(oats.data$plot)
 ## Define the precision matrix, see eqn (A2) in Boer et al (2020).
-N <- nrow(john.alpha)
+N <- nrow(oats.data)
 cN <- c(1 / sqrt(N - 1), rep(0, N - 2), 1 / sqrt(N - 1))
 D <- diff(diag(N), diff = 1)
 Delta <- 0.5 * crossprod(D)
@@ -409,15 +409,27 @@ lGinv <- list(plotF = LVinv)
 obj7 <- LMMsolve(fixed = yield ~ rep + gen,
                  random = ~plotF, 
                  ginverse = lGinv, 
-                 data = john.alpha)
+                 data = oats.data)
 
 ## ----summary_dev_VAR----------------------------------------------------------
 round(deviance(obj7, relative = FALSE), 2)
 summary(obj7, which = "variances")
 
+## ----schmidtmodeloats---------------------------------------------------------
+obj7b <- LMMsolve(fixed = yield ~ rep,
+                 random = ~gen + rep:block, 
+                 data = oats.data)
+
+## ----effdim-------------------------------------------------------------------
+EDdf <- effDim(obj7b)
+EDdf
+
+## ----genh2--------------------------------------------------------------------
+round(subset(EDdf, Term == "gen")$Ratio, 3)
+
 ## ----APSIMdat-----------------------------------------------------------------
 data(APSIMdat)
-head(APSIMdat)
+head(APSIMdat, 3)
 
 ## ----APSIMmodel---------------------------------------------------------------
 obj8 <- LMMsolve(fixed = biomass ~ 1,
@@ -454,7 +466,7 @@ ggplot(data = plotDatDt, aes(x = das, y = ypred)) +
 ## ----multipop-----------------------------------------------------------------
 ## Load data for multiparental population.
 data(multipop)
-head(multipop)
+head(multipop, 3)
 
 ## ----residualARG--------------------------------------------------------------
 ## Fit null model.

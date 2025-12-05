@@ -1,3 +1,12 @@
+# LMMsolver 1.0.12
+
+-   First derivatives for `predict` using `deriv` argument now also implemented for `spl2D` and `spl3D`. 
+-   function `effDim()` added to get data.frame with effective dimensions.
+-   In the vignette, an example added how the generalized heritability can be calculated.
+-   Improved code coverage > 95%.
+-   Data sets `barley.uniformity.trial` and `oats.data` added.
+-   All data included in the package that are needed for tests.
+
 # LMMsolver 1.0.11
 
 -   New function `mLogLik()` for the calculations of the log-likelihood and first derivatives as function of precision parameters `theta`. 
@@ -15,7 +24,7 @@
 # LMMsolver 1.0.9
 
 -   Binomial response can now also be modelled as `fixed = cbind(failure, succes)`
--   Categorial response using `family = multinomial()`
+-   Categorical response using `family = multinomial()`
 -   Vignette updated, with separate section for GLMM.
 -   doi-link added for `LMMsolver`. 
 -   argument `offset` can be defined as numeric or (new) as column name in data frame. 
