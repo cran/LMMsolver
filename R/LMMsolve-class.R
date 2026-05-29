@@ -31,6 +31,8 @@
 #' mixed model}
 #' \item{term.labels.f}{The names of the fixed terms in the mixed model}
 #' \item{term.labels.r}{The names of the random terms in the mixed model}
+#' \item{fix.spec}{Specification of fixed part of mixed model}
+#' \item{ran.spec}{Specification of random part of mixed model}
 #' \item{respVar}{The name(s) of the response variable(s).}
 #' \item{splRes}{An object with definition of spline argument}
 #' \item{deviance}{The relative deviance}
@@ -65,6 +67,8 @@ LMMsolveObject <- function(logL,
                            Nres,
                            term.labels.f,
                            term.labels.r,
+                           fix.spec,
+                           ran.spec,
                            respVar,
                            splRes,
                            family,
@@ -94,6 +98,8 @@ LMMsolveObject <- function(logL,
                  Nres = Nres,
                  term.labels.f = term.labels.f,
                  term.labels.r = term.labels.r,
+                 fix.spec = fix.spec,
+                 ran.spec = ran.spec,
                  respVar = respVar,
                  splRes = splRes,
                  family = family,
@@ -526,9 +532,11 @@ predict.LMMsolve <- function(object,
 
   for (s in seq_len(nGam)) {
     spl <- object$splRes[[s]]
-    ndx.f <- which(spl$term.labels.f == labels)
+    if (!is.null(spl$term.labels.f)) {
+      ndx.f <- which(spl$term.labels.f == labels)
+      lU[[ndx.f]] <- XTot[[s]]
+    }
     ndx.r <- which(spl$term.labels.r == labels)
-    lU[[ndx.f]] <- XTot[[s]]
     lU[[ndx.r]] <- BxTot[[s]]
   }
   U <- Reduce(spam::cbind.spam, lU)
@@ -536,30 +544,41 @@ predict.LMMsolve <- function(object,
     U <- U %x% spam::diag.spam(nCat)
   }
 
-  tmp <- object$term.labels.f[-1]
-  fixTerms <- setdiff(tmp, splFixLab)
+  X_fixed <- constructFixed_pred(
+    spec = object$fix.spec,
+    data = newdata
+  )
+  if (ncol(X_fixed) > 1) {
+    X_fixed <- X_fixed[,-1, drop=FALSE]
+    X_fixed <- spam::as.spam.dgCMatrix(X_fixed)
 
-  nFixTerms <- length(fixTerms)
-  if (nFixTerms > 0) {
-    colNames <- colnames(newdata)
-    Missing <- !(fixTerms %in% colNames)
-    if (sum(Missing) > 0) {
-      missingVar <- paste(fixTerms[Missing], collapse=",")
-      str <- paste0("variables (", missingVar, ") in data.frame newdata missing.\n")
-      stop(str)
-    }
-    for (i in seq_len(nFixTerms)) {
-      U <- U + makeDesignTerm(object, newdata, fixTerms[i])
-    }
+    tmp <- object$term.labels.f[-1]
+    fixTerms <- setdiff(tmp, splFixLab)
+    ndx <- unlist(object$ndxCoefficients[fixTerms])
+    ndx <- ndx[ndx != 0]
+    U[, ndx] <- X_fixed
+  }
+
+  Z1_ran <- build_random_Z1_pred (
+    spec = object$ran.spec,
+    data = newdata
+  )
+  if (!is.null(Z1_ran)) {
+    ranTerms <- setdiff(object$term.labels.r, splRanLab)
+    ndx <- unlist(object$ndxCoefficients[ranTerms])
+    U[, ndx] <- Z1_ran
   }
 
   outDat <- newdata
 
   ranTerms <- setdiff(object$term.labels.r, splRanLab)
   nRanTerms <- length(ranTerms)
+  excluded_var <- get_missing_vars(object$ran.spec$terms, newdata)
   for (i in seq_len(nRanTerms)) {
     term <- ranTerms[[i]]
-    outDat[[term]] <- rep("Excluded",nRow)
+    if (excluded_var[i]) {
+      outDat[[term]] <- rep("Excluded",nRow)
+    }
   }
   if (family$family == "multinomial") {
     eta <- as.vector(U %*% object$coefMME)

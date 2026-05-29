@@ -1,37 +1,85 @@
+#' @importFrom stats .getXlevels
+build_random_Z1_train <- function(random, data) {
+  if (is.null(random)) {
+    return(list(Z = NULL, spec = NULL))
+  }
+
+  mf <- model.frame(random, data, drop.unused.levels = TRUE)
+
+  ## name check
+  names_mf <- names(mf)
+  if (!all(names_mf == make.names(names_mf))) {
+    stop("Syntactically invalid name(s): ",
+         paste(names_mf[names_mf != make.names(names_mf)], collapse=", "),
+         call. = FALSE)
+  }
+
+  mt <- terms(mf)
+
+  f.terms <- all.vars(mt)[attr(mt, "dataClasses") == "factor"]
+
+  contrasts.arg <- lapply(
+    mf[, f.terms, drop = FALSE],
+    contrasts,
+    contrasts = FALSE   # important for random
+  )
+
+  Z1 <- Matrix::sparse.model.matrix(
+    mt,
+    data = mf,
+    contrasts.arg = contrasts.arg
+  )
+
+  dim.r <- table(attr(Z1, "assign"))[-1]
+  term.labels.r <- attr(mt, "term.labels")
+
+  ## remove intercept column
+  if (ncol(Z1) > 1) {
+    Z1 <- Z1[, -1, drop = FALSE]
+    colnames_Z1 <- colnames(Z1)
+    Z1 <- spam::as.spam.dgCMatrix(Z1)
+  } else {
+    Z1 <- NULL
+    colnames_Z1 <- NULL
+  }
+
+  if (!is.null(Z1)) {
+    spec <- list(
+      terms        = mt,
+      xlevels      = .getXlevels(mt, mf),
+      contrasts    = contrasts.arg,
+      colnames     = colnames_Z1,
+      dim.r        = dim.r,
+      term.labels  = term.labels.r)
+  } else {
+    spec <- list(
+      terms       = NULL,
+      xlevels     = NULL,
+      constrasts  = NULL,
+      colnames    = NULL,
+      dim.r       = NULL,
+      term.labels = NULL)
+  }
+
+  return(list(Z = Z1, spec = spec))
+}
+
 constructRandom <- function(random, group, condFactor, data) {
-  ## Make random part.
-  if (!is.null(random)) {
-    mf <- model.frame(random, data, drop.unused.levels = TRUE, na.action = NULL)
-    names_mf <- names(mf)
-    IsValidName <- names_mf == make.names(names_mf)
-    if (!all(IsValidName)) {
-      stop("Syntactically invalid name(s): ", paste(names_mf[which(!IsValidName)], collapse=", "), "\n")
-    }
-    mt <- terms(mf)
-    f.terms <- all.vars(mt)[attr(mt, "dataClasses") == "factor"]
-    Z1 <- Matrix::sparse.model.matrix(mt, data = mf,
-                                      contrasts.arg = lapply(X = mf[, f.terms, drop = FALSE],
-                                                             FUN = contrasts,
-                                                             contrasts = FALSE))
-    dim1.r <- table(attr(Z1, "assign"))[-1]
-    term1.labels.r <- attr(mt, "term.labels")
+  res <- build_random_Z1_train(random, data)
+
+  Z1 <- res$Z
+  spec_Z1 <- res$spec
+  dim1.r <- spec_Z1$dim.r
+  term1.labels.r <- spec_Z1$term.labels
+  if (!is.null(Z1)) {
     scFactor1 <- rep(1, length(dim1.r))
     ## Number of variance parameters (see Gilmour 1995) for each variance component
     varPar1 <- rep(1, length(dim1.r))
-    if (ncol(Z1) > 1) {
-      Z1 <- Z1[, -1, drop = FALSE]
-      Z1 <- spam::as.spam.dgCMatrix(Z1)
-    }
-    else {
-      Z1 <- NULL
-    }
   } else {
     scFactor1 <- NULL
-    dim1.r <- NULL
-    term1.labels.r <- NULL
-    Z1 <- NULL
     varPar1 <- NULL
   }
+
   if (!is.null(group)) {
     ndx <- unlist(group)
     dim2.r <- sapply(X = group, FUN = length)
@@ -85,6 +133,58 @@ constructRandom <- function(random, group, condFactor, data) {
   L <- list(Z = Z, lGinv = lGinv, dim.r = dim.r,
             term.labels.r = term.labels.r, scFactor = scFactor,
             varPar = varPar,
-            nNonSplinesRandom = length(dim.r))
+            nNonSplinesRandom = length(dim.r),
+            ran.spec = spec_Z1)
   return(L)
 }
+
+#' @importFrom stats na.pass
+build_random_Z1_pred <- function(spec, data) {
+
+  if (is.null(spec)) return(NULL)
+
+  mt <- spec$terms
+
+  ## 1. Ensure required variables exist (inject NA if missing)
+  data <- fill_missing_vars(mt, data, spec$xlevels)
+
+  ## 2. Check for new (invalid) levels, ignoring NA
+  check_new_levels(data, spec$xlevels)
+
+  ## 3. Build model frame (keep NA)
+  mf <- model.frame(
+    mt,
+    data,
+    xlev = spec$xlevels,
+    drop.unused.levels = FALSE,
+    na.action = na.pass
+  )
+
+  ## 4. Construct design matrix
+  Z1 <- Matrix::sparse.model.matrix(
+    mt,
+    data = mf,
+    contrasts.arg = spec$contrasts
+  )
+
+  ## 5. Convert NA → 0 (missing = no contribution)
+  if (anyNA(Z1)) {
+    Z1[is.na(Z1)] <- 0
+  }
+
+  ## 6. Remove intercept column (as in training)
+  if (ncol(Z1) > 1) {
+    Z1 <- Z1[, -1, drop = FALSE]
+  } else {
+    return(NULL)
+  }
+
+  ## 7. make sure column order is correct
+  Z1 <- Z1[, spec$colnames, drop = FALSE]
+
+  ## 8. Convert to spam
+  Z1 <- spam::as.spam.dgCMatrix(Z1)
+
+  return(Z1)
+}
+

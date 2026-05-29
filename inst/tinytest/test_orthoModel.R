@@ -1,0 +1,171 @@
+
+##
+## Synthetic data
+##
+set.seed(1)
+
+n <- 100
+
+dat <- data.frame(
+  x1 = runif(n),
+  x2 = runif(n)
+)
+
+sim_fun <- function(data) {
+  y <- sin(2*pi*data$x1)*exp(-data$x1) +
+       sin(2*pi*data$x2)*exp(-2*data$x2) +
+       0.4*(sin(2 * pi * data$x1) * sin(2 * pi * data$x2)) +
+      rnorm(n, sd = 0.1)
+  y
+}
+
+dat$y <- sim_fun(dat)
+
+##
+## Basis specification
+##
+b1 <- LMMsolver:::basis(x1, xmin = 0, xmax = 1, nseg = 6, deg = 3, pord = 2)
+b2 <- LMMsolver:::basis(x2, xmin = 0, xmax = 1, nseg = 5, deg = 3, pord = 2)
+
+bases <- list(
+  x1 = b1,
+  x2 = b2
+)
+
+
+##
+## Test basis object
+##
+expect_true(inherits(b1, "basis_spec"))
+
+expect_equal(b1$var, "x1")
+expect_equal(b1$xmin, 0)
+expect_equal(b1$xmax, 1)
+expect_equal(b1$nseg, 6)
+
+
+##
+## Test eval_basis structure
+##
+f <- LMMsolver:::eval_basis(b1, dat)
+
+expect_true(is.list(f))
+
+expect_true(all(c("B","M","P","C","knots") %in% names(f)))
+
+q <- ncol(f$B)
+
+expect_equal(nrow(f$B), n)
+expect_equal(ncol(f$M), q-1)
+expect_equal(nrow(f$M), q)
+
+expect_equal(nrow(f$P), q-1)
+expect_equal(ncol(f$P), q-1)
+
+expect_equal(dim(f$C), c(q-1,1))
+
+
+##
+## Test penalty symmetry
+##
+P_dense <- as.matrix(f$P)
+
+expect_true(isSymmetric(P_dense))
+
+
+##
+## Test orthogonality property of M
+##
+w <- LMMsolver:::ortho_int_condition(p = b1$deg, q = q)
+
+expect_equal(drop(w %*% f$M), rep(0, q-1), tolerance = 1e-10)
+
+
+##
+## Test interaction construction
+##
+f1 <- LMMsolver:::eval_basis(b1, dat)
+f2 <- LMMsolver:::eval_basis(b2, dat)
+
+B12 <- LMMsolver:::RowKronecker(f1$B, f2$B)
+M12 <- f1$M %x% f2$M
+
+expect_equal(
+  ncol(B12 %*% M12),
+  ncol(f1$M) * ncol(f2$M)
+)
+
+
+##
+## Test orthoModel (main effects only)
+##
+model <- y ~ x1 + x2
+
+fit1 <- LMMsolver:::orthoModel(
+  model = model,
+  bases = bases,
+  data  = dat,
+  trace = FALSE
+)
+
+expect_equivalent_to_reference(fit1, "ortho_fit1")
+
+expect_true(is.list(fit1))
+
+expect_true("dim" %in% names(fit1))
+
+expect_true("response_name" %in% names(fit1))
+
+
+##
+## Dimension consistency
+##
+dimtab <- fit1$dim
+
+expect_true(all(c("term","dim","s","e") %in% names(dimtab)))
+
+expect_equal(dimtab$term[1], "Intercept")
+
+
+##
+## Test model with interaction
+##
+model2 <- y ~ x1 + x2 + x1:x2
+
+fit2 <- LMMsolver:::orthoModel(
+  model = model2,
+  bases = bases,
+  data  = dat,
+  trace = FALSE
+)
+
+expect_equivalent_to_reference(fit2, "ortho_fit2")
+
+expect_true(is.list(fit2))
+expect_true(nrow(fit2$dim) >= 3)
+
+
+##
+## Check that constraints matrix matches dimension
+##
+TotDim <- max(fit2$dim$e)
+
+expect_true(TotDim > 0)
+
+
+##
+## Test prediction matrix dimensions
+##
+f <- LMMsolver:::eval_basis(b1, dat)
+
+Z <- f$B %*% f$M
+
+expect_equal(nrow(Z), n)
+
+
+##
+## Penalty scaling check
+##
+dx <- attr(f$knots, "dx")
+
+expect_true(dx > 0)

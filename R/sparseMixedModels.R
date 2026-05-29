@@ -35,6 +35,93 @@ calcSumSquares <- function(lYtRinvY,
   return(SS_all)
 }
 
+# build from the restrictions and the penalties an indicator matrix
+build_restriction_matrix <- function(C_restrict, lP) {
+  n_penalty <- length(lP)
+  n_constraints <- ncol(C_restrict)
+  kappa <- matrix(0, nrow = n_penalty, ncol = n_constraints)
+  for (i in seq_len(n_penalty)) {
+    for (j in seq_len(n_constraints)) {
+      cj <- C_restrict[, j]
+      kappa[i, j] <- as.numeric(t(cj) %*% lP[[i]] %*% cj)
+    }
+  }
+  kappa <- 1*(kappa > 1.0e-12)
+  kappa
+}
+
+PrecisionMatrix_lifting <- function(C_restrict, lP, kappa) {
+  n_penalties <- length(lP)
+  n_constraints <- ncol(C_restrict)
+
+  lP_lifted <- lP
+
+  for (i in seq_len(n_penalties)) {
+
+    # select only constraints relevant for this penalty
+    idx <- which(kappa[i, ] == 1)
+
+    if (length(idx) > 0) {
+      C_i <- C_restrict[, idx, drop = FALSE]
+
+      lP_lifted[[i]] <- lP[[i]] + C_i %*% spam::t.spam(C_i)
+    }
+  }
+
+  lP_lifted
+}
+
+
+## ---- log-det contribution (psi-dependent part) ----
+logdet_correction <- function(M, psi)
+{
+  logdetQ <- 0
+  for (j in seq_len(ncol(M))) {
+    idx <- which(M[, j] == 1)
+    logdetQ <- logdetQ + log(sum(psi[idx]))
+  }
+  logdetQ
+}
+
+## ---- EDs per penalty ----
+ED_corrections <- function(M, psi) {
+  ED <- numeric(length(psi))
+  for (j in seq_len(ncol(M))) {
+    idx <- which(M[, j] == 1)
+    ED[idx] <- ED[idx] + psi[idx] / sum(psi[idx])
+  }
+  ED
+}
+
+# make the matrix positive definite
+# PrecisionMatrix_lifting <- function(C_restrict, lP) {
+#   n_penalties <- length(lP)
+#   lP_lifted <- lP
+#   for (i in seq_len(n_penalties)) {
+#     C_i <- C_restrict[, i, drop = FALSE]
+#     lP_lifted[[i]] <- lP[[i]] + C_i %*% spam::t.spam(C_i)
+#   }
+#   lP_lifted
+# }
+
+compute_alpha_active <- function(x, y, active, lower = -7, upper = 7) {
+  alpha_max <- Inf
+
+  for (i in seq_along(x)) {
+    if (!active[i]) next  # skip fixed variables
+
+    if (y[i] > 0) {
+      alpha_i <- (upper - x[i]) / y[i]
+      alpha_max <- min(alpha_max, alpha_i)
+    } else if (y[i] < 0) {
+      alpha_i <- (lower - x[i]) / y[i]
+      alpha_max <- min(alpha_max, alpha_i)
+    }
+  }
+
+  return(alpha_max)
+}
+
 #' @importFrom stats update
 #' @keywords internal
 sparseMixedModels <- function(y,
@@ -47,7 +134,8 @@ sparseMixedModels <- function(y,
                               trace = FALSE,
                               theta = NULL,
                               fixedTheta = NULL,
-                              grpTheta = NULL) {
+                              grpTheta = NULL,
+                              C_restrict = NULL) {
   Ntot <- length(y)
   p <- ncol(X)
   q <- ncol(Z)
@@ -81,6 +169,12 @@ sparseMixedModels <- function(y,
   ## Remove some extra zeros.
   lWtRinvW <- lapply(X = lWtRinvW, FUN = spam::cleanup)
   lQ <- lapply(X = lQ, FUN = spam::cleanup)
+
+  if (!is.null(C_restrict)) {
+    kappa <- build_restriction_matrix(C_restrict, lGinv)
+    lGinv <- PrecisionMatrix_lifting(C_restrict, lGinv, kappa)
+  }
+
   lGinv <- lapply(X = lGinv, FUN = spam::cleanup)
   lRinv <- lapply(X = lRinv, FUN = spam::cleanup)
   lC <- lapply(X = lC, FUN = spam::cleanup)
@@ -156,6 +250,9 @@ sparseMixedModels <- function(y,
     if (!is.null(ADcholGinv)) {
       dlogdetGinv <- dlogdet(ADcholGinv, psi)
       logdetG <- -attr(dlogdetGinv, which = "logdet")
+      if (!is.null(C_restrict)) {
+        logdetG <- logdetG + logdet_correction(kappa, psi)
+      }
     } else {
       logdetG <- 0
     }
@@ -171,6 +268,9 @@ sparseMixedModels <- function(y,
     ## calculate effective dimensions.
     if (!is.null(ADcholGinv)) {
       EDmax_psi <- psi * dlogdetGinv
+      if (!is.null(C_restrict)) {
+        EDmax_psi <- EDmax_psi - ED_corrections(kappa, psi)
+      }
     } else {
       EDmax_psi <- NULL
     }
@@ -199,11 +299,46 @@ sparseMixedModels <- function(y,
     }
     ED_restr <- as.vector(ED %*% conM)
     SS_all_restr <- as.vector(SS_all %*% conM)
-    theta_restr <- ifelse(fixedThetaRes, theta_restr, ED_restr / SS_all_restr)
+
+    # do updat on a log-scale
+    eta <- log10(theta_restr)
+    grad_eta <- log10(ED_restr/theta_restr) - log10(SS_all_restr)
+
+    # freeze gradients
+    grad_eta[fixedThetaRes] <- 0
+
+    alpha_max <- compute_alpha_active(
+      eta, grad_eta, !fixedThetaRes,
+      lower = -6, upper = 6
+    )
+
+    alpha <- min(1, alpha_max)
+
+    eta_new <- eta + alpha * grad_eta
+
+    # detect boundary hits
+    tol <- 1e-10
+    hit_upper <- eta_new >= (6 - tol)
+    hit_lower <- eta_new <= (-6 + tol)
+
+    eta_new[hit_upper] <- 6
+    eta_new[hit_lower] <- -6
+
+    # update active set
+    fixedThetaRes <- fixedThetaRes | hit_upper | hit_lower
+
+    #if (all(fixedThetaRes)) {
+    #  stop("Cannot find solution; all penalties fixed\n")
+    #}
+
+    #cat("eta ", eta, "  eta_new", eta_new, " non-active " , fixedThetaRes, "\n")
+
+    # back-transform
+    theta_restr <- 10^eta_new
     theta <- as.vector(conM %*% theta_restr)
 
-    fixedTheta <- theta > 1.0e6 | fixedTheta
-    fixedThetaRes <- theta_restr > 1.0e6 | fixedThetaRes
+    #fixedTheta <- theta > 1.0e6 | fixedTheta
+    #fixedThetaRes <- theta_restr > 1.0e6 | fixedThetaRes
 
     logLprev <- logL
   }

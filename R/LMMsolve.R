@@ -101,8 +101,7 @@
 #' @seealso \code{\link{LMMsolveObject}}, \code{\link{spl1D}},
 #' \code{\link{spl2D}}, \code{\link{spl3D}}
 #'
-#' @importFrom stats model.frame terms model.matrix contrasts as.formula
-#' terms.formula aggregate model.response var formula gaussian
+#' @importFrom stats model.frame terms model.matrix contrasts as.formula terms.formula aggregate model.response var formula gaussian
 #'
 #' @export
 LMMsolve <- function(fixed,
@@ -234,13 +233,25 @@ LMMsolve <- function(fixed,
   scFactor <- ranPart$scFactor
   varPar <- ranPart$varPar
   nNonSplinesRandom <- ranPart$nNonSplinesRandom
+  ran.spec <- ranPart$ran.spec
+
+  # Align ginverse
+  if (!is.null(ginverse)) {
+    ginverse <- checkGinverseAgainstData(
+      ginverse,
+      data = data,
+      random_terms = term.labels.r
+    )
+  }
 
   lGinv <- constructGinv(ginverse, lGinv, dim.r, term.labels.r)
 
   ## construct Fixed part (excluding splines)
-  X <- constructFixed(fixed, data)
-  dim.f <- attr(X, which="dim.f")
-  term.labels.f <- attr(X, which="term.labels.f")
+  res <- constructFixed_train(fixed, data)
+  X <- res$X
+  fix.spec <- res$spec
+  dim.f <- fix.spec$dim.f
+  term.labels.f <- fix.spec$term.labels.f
 
   ## Add spline part.
   splResList <- NULL
@@ -265,7 +276,7 @@ LMMsolve <- function(fixed,
       X <- cbind(X, splRes$X)
       ## Check whether adding the fixed part gives a singularity.
       if (qr(X)$rank < ncol(X)) {
-        stop("singularity problem ", splRes$term.labels.f, " in spline argument\n")
+        stop("fixed part of the model is not full rank.\n")
       }
       ## Add to design matrix random effect Z.
       Z <- spam::cbind.spam(Z, splRes$Z)
@@ -313,6 +324,8 @@ LMMsolve <- function(fixed,
               family = family, offset = offset,
               dim.f = dim.f, dim.r = dim.r,
               term.labels.f = term.labels.f, term.labels.r = term.labels.r,
+              fix.spec = fix.spec,
+              ran.spec = ran.spec,
               respVar = respVar,
               NomEffDimRan = NomEffDimRan, varPar = varPar,
               splResList = splResList, residual = residual,

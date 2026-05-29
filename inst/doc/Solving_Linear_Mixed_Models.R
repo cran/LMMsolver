@@ -59,7 +59,7 @@ obj2 <- LMMsolve(fixed = y ~ 1,
 summary(obj2)
 
 ## ----predict_non--------------------------------------------------------------
-newdat <- data.frame(x = seq(0, 1, length = 300))
+newdat <- makeGrid(obj2, grid = 300)
 pred2 <- predict(obj2, newdata = newdat, se.fit = TRUE)
 pred2$y_true <- g(pred2$x)
 
@@ -118,7 +118,7 @@ obj4 <- LMMsolve(fixed= y ~ 1,
 summary(obj4)
 
 ## ----twoExpPredict------------------------------------------------------------
-newdat <- data.frame(x=seq(0, 1, length = 300))
+newdat <- makeGrid(obj4, grid = 300)
 pred4 <- predict(obj4, newdata = newdat, se.fit = TRUE)
 pred4$y_true <- g(pred4$x)
 ggplot(data = dat4, aes(x = x, y = y, colour = Experiment)) +
@@ -150,10 +150,7 @@ obj5 <- LMMsolve(fixed = anomaly ~ 1,
 summary(obj5)
 
 ## ----pred_USprecip------------------------------------------------------------
-lon_range <- range(USprecip$lon)
-lat_range <- range(USprecip$lat)
-newdat <- expand.grid(lon = seq(lon_range[1], lon_range[2], length = 200),
-                      lat = seq(lat_range[1], lat_range[2], length = 300))
+newdat <- makeGrid(obj5, grid = c(200, 300))
 plotDat5 <- predict(obj5, newdata = newdat)
 
 ## ----Plot_USprecip------------------------------------------------------------
@@ -221,11 +218,7 @@ obj6 <- LMMsolve(fixed = sst ~ 1,
 summary(obj6)
 
 ## ----predictions_grid---------------------------------------------------------
-lon_range <- BM_box[, "lon"]
-lat_range <- BM_box[, "lat"]
-newdat <- expand.grid(lon = seq(lon_range[1], lon_range[2], length = 200),
-                      lat = seq(lat_range[1], lat_range[2], length = 200))
-
+newdat <- makeGrid(obj6, grid = c(200, 200))
 pred_grid <- predict(obj6, newdata = newdat, se.fit=TRUE)
 pred_grid <- pred_grid[pred_grid$se<5, ]
 
@@ -281,7 +274,7 @@ obj3 <- LMMsolve(fixed = y ~ 1,
 summary(obj3)
 
 ## ----predict_poisson----------------------------------------------------------
-newdat <- data.frame(x = seq(0, 1, length = 300))
+newdat <- makeGrid(obj3, grid = 300)
 pred3 <- predict(obj3, newdata = newdat, se.fit = TRUE)
 pred3$y_true <- fun_lambda(pred3$x)
 
@@ -402,8 +395,13 @@ cN <- c(1 / sqrt(N - 1), rep(0, N - 2), 1 / sqrt(N - 1))
 D <- diff(diag(N), diff = 1)
 Delta <- 0.5 * crossprod(D)
 LVinv <- 0.5 * (2 * Delta + cN %*% t(cN))
-## Add LVinv to list, with name corresponding to random term.
 lGinv <- list(plotF = LVinv)
+
+LVinv <- Matrix::Matrix(LVinv, sparse = TRUE)
+rownames(LVinv) <- colnames(LVinv) <- as.character(seq_len(nrow(LVinv)))
+## Add LVinv to list, with name corresponding to random term.
+lGinv <- as.ginverse(list(plotF = LVinv))
+
 
 ## ----modelLV------------------------------------------------------------------
 obj7 <- LMMsolve(fixed = yield ~ rep + gen,
@@ -420,12 +418,8 @@ obj7b <- LMMsolve(fixed = yield ~ rep,
                  random = ~gen + rep:block, 
                  data = oats.data)
 
-## ----effdim-------------------------------------------------------------------
-EDdf <- effDim(obj7b)
-EDdf
-
 ## ----genh2--------------------------------------------------------------------
-round(subset(EDdf, Term == "gen")$Ratio, 3)
+round(getHeritability(obj7b, geno.term = "gen"), 3)
 
 ## ----APSIMdat-----------------------------------------------------------------
 data(APSIMdat)
@@ -440,8 +434,7 @@ obj8 <- LMMsolve(fixed = biomass ~ 1,
 summary(obj8)
 
 ## ----APSIMplot----------------------------------------------------------------
-das_range <- range(APSIMdat$das)
-newdat <- data.frame(das=seq(das_range[1], das_range[2], length = 300))
+newdat <- makeGrid(obj8, grid = 300)
 pred8 <- predict(obj8, newdata = newdat, se.fit = TRUE)
 ggplot(data = APSIMdat, aes(x = das, y = biomass)) +
   geom_point(size = 1.0) +
