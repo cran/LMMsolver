@@ -221,13 +221,23 @@ sparseMixedModels <- function(y,
   Rinv <- Reduce("+", lRinv)
   logdetRinvConstant <- as.numeric(spam::determinant.spam(Rinv)$modulus)
 
-  ## Make ADchol for Ginv and C:
+  ## Make SparseCholesky for Ginv and C:
   if (Nvarcomp > 0) {
-    ADcholGinv <- ADchol(lGinv)
+    Ginv <- Reduce('+', lGinv)
+    objGinv <- SparseCholesky(Ginv, init=FALSE)
+    VGinv <- vecList(objGinv, lGinv)
   } else {
-    ADcholGinv <- NULL
+    objGinv <- NULL
   }
-  ADcholC <- ADchol(lC)
+  C0 <- Reduce('+', lC)
+  opt <- summary(C0)
+  cholC <- suppressWarnings(
+    chol(C0,
+         memory = list(nnzR = 8 * opt$nnz,
+                       nnzcolindices = 4 * opt$nnz)))
+  objC <- SparseCholesky(cholC, init=FALSE)
+  VC <- vecList(objC, lC)
+
   ## Initialize values for loop.
   logLprev <- Inf
   if (trace) {
@@ -247,26 +257,33 @@ sparseMixedModels <- function(y,
 
     ## calculated logdet and dlogdet for Ginv and C.
     ## Ginv, if exists
-    if (!is.null(ADcholGinv)) {
-      dlogdetGinv <- dlogdet(ADcholGinv, psi)
-      logdetG <- -attr(dlogdetGinv, which = "logdet")
+    if (!is.null(objGinv)) {
+      objGinv <- updateLinear(objGinv, VGinv, psi)
+
+      logdetG <- -logdet(objGinv)
+
+      dlogdetGinv <- dlogdetLinear(objGinv, VGinv, psi)
+
       if (!is.null(C_restrict)) {
         logdetG <- logdetG + logdet_correction(kappa, psi)
       }
     } else {
       logdetG <- 0
+      dlogdetGinv <- NULL
     }
-    ## update the expressions including Rinv.
+
     YtRinvY <- sum(phi * unlist(lYtRinvY))
     WtRinvY <- as.vector(linearSum(theta = phi, matrixList = lWtRinvY))
 
     ## matrix C.
-    dlogdetC <- dlogdet(ADcholC, theta, WtRinvY)
-    logdetC <- attr(dlogdetC, which = "logdet")
-    a <- attr(dlogdetC, which = "x.coef")
+    objC <- updateLinear(objC, VC, theta)
+    logdetC <- logdet(objC)
+    a <- solve(objC, WtRinvY)
+
+    dlogdetC <- dlogdetLinear(objC, VC, theta)
 
     ## calculate effective dimensions.
-    if (!is.null(ADcholGinv)) {
+    if (!is.null(objGinv)) {
       EDmax_psi <- psi * dlogdetGinv
       if (!is.null(C_restrict)) {
         EDmax_psi <- EDmax_psi - ED_corrections(kappa, psi)
@@ -346,11 +363,11 @@ sparseMixedModels <- function(y,
     warning("No convergence after ", maxit, " iterations \n", call. = FALSE)
   }
 
-  ## MB: not really needed, just to keep consistent with previous versions.
   C <- linearSum(theta = theta, matrixList = lC)
-  opt <- summary(C)
-  cholC <- chol(C, memory = list(nnzR = 8 * opt$nnz,
-                                 nnzcolindices = 4 * opt$nnz))
+  cholC@entries <- objC@entries
+  ##opt <- summary(C)
+  ##cholC <- chol(C, memory = list(nnzR = 8 * opt$nnz,
+  ##                               nnzcolindices = 4 * opt$nnz))
 
   ## calculate yhat and residuals
   yhat <- W %*% a

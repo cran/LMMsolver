@@ -11,7 +11,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 
 
-<meta name="date" content="2026-05-20" />
+<meta name="date" content="2026-09-22" />
 
 <title>Mixed Models and Smoothing</title>
 
@@ -361,7 +361,7 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 
 <h1 class="title toc-ignore">Mixed Models and Smoothing</h1>
-<h4 class="date">2026-05-20</h4>
+<h4 class="date">2026-09-22</h4>
 
 
 
@@ -471,10 +471,10 @@ P-splines with 50 segments.</p>
 <span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a><span class="co">#&gt; Table with effective dimensions and penalties: </span></span>
 <span id="cb10-3"><a href="#cb10-3" tabindex="-1"></a><span class="co">#&gt; </span></span>
 <span id="cb10-4"><a href="#cb10-4" tabindex="-1"></a><span class="co">#&gt;         Term Effective Model Nominal Ratio Penalty</span></span>
-<span id="cb10-5"><a href="#cb10-5" tabindex="-1"></a><span class="co">#&gt;  (Intercept)      1.00     1       1  1.00     0.0</span></span>
-<span id="cb10-6"><a href="#cb10-6" tabindex="-1"></a><span class="co">#&gt;       lin(x)      1.00     1       1  1.00     0.0</span></span>
-<span id="cb10-7"><a href="#cb10-7" tabindex="-1"></a><span class="co">#&gt;         s(x)     11.28    53      51  0.22     0.0</span></span>
-<span id="cb10-8"><a href="#cb10-8" tabindex="-1"></a><span class="co">#&gt;     residual    136.72   150     148  0.92    30.3</span></span>
+<span id="cb10-5"><a href="#cb10-5" tabindex="-1"></a><span class="co">#&gt;  (Intercept)      1.00     1       1  1.00    0.00</span></span>
+<span id="cb10-6"><a href="#cb10-6" tabindex="-1"></a><span class="co">#&gt;       lin(x)      1.00     1       1  1.00    0.00</span></span>
+<span id="cb10-7"><a href="#cb10-7" tabindex="-1"></a><span class="co">#&gt;         s(x)     11.28    53      51  0.22   21.38</span></span>
+<span id="cb10-8"><a href="#cb10-8" tabindex="-1"></a><span class="co">#&gt;     residual    136.72   150     148  0.92   30.30</span></span>
 <span id="cb10-9"><a href="#cb10-9" tabindex="-1"></a><span class="co">#&gt; </span></span>
 <span id="cb10-10"><a href="#cb10-10" tabindex="-1"></a><span class="co">#&gt;  Total Effective Dimension: 150</span></span></code></pre></div>
 <p>The intercept and the slope <code>lin(x)</code> define the linear (or
@@ -567,7 +567,7 @@ by defining <code>residual = ~Experiment</code>.</li>
 <span id="cb16-5"><a href="#cb16-5" tabindex="-1"></a><span class="co">#&gt;     (Intercept)      1.00     1       1  1.00    0.00</span></span>
 <span id="cb16-6"><a href="#cb16-6" tabindex="-1"></a><span class="co">#&gt;          lin(x)      1.00     1       1  1.00    0.00</span></span>
 <span id="cb16-7"><a href="#cb16-7" tabindex="-1"></a><span class="co">#&gt;      Experiment      0.93     2       1  0.93   77.97</span></span>
-<span id="cb16-8"><a href="#cb16-8" tabindex="-1"></a><span class="co">#&gt;            s(x)      7.89    53      51  0.15    0.00</span></span>
+<span id="cb16-8"><a href="#cb16-8" tabindex="-1"></a><span class="co">#&gt;            s(x)      7.89    53      51  0.15   38.18</span></span>
 <span id="cb16-9"><a href="#cb16-9" tabindex="-1"></a><span class="co">#&gt;  Experiment_A!R     43.66    50      50  0.87   32.15</span></span>
 <span id="cb16-10"><a href="#cb16-10" tabindex="-1"></a><span class="co">#&gt;  Experiment_B!R     95.52   100     100  0.96    9.01</span></span>
 <span id="cb16-11"><a href="#cb16-11" tabindex="-1"></a><span class="co">#&gt; </span></span>
@@ -628,8 +628,8 @@ the penalty parameters:</p>
 <span id="cb21-4"><a href="#cb21-4" tabindex="-1"></a><span class="co">#&gt;           Term Effective Model Nominal Ratio Penalty</span></span>
 <span id="cb21-5"><a href="#cb21-5" tabindex="-1"></a><span class="co">#&gt;    (Intercept)      1.00     1       1  1.00    0.00</span></span>
 <span id="cb21-6"><a href="#cb21-6" tabindex="-1"></a><span class="co">#&gt;  lin(lon, lat)      3.00     3       3  1.00    0.00</span></span>
-<span id="cb21-7"><a href="#cb21-7" tabindex="-1"></a><span class="co">#&gt;         s(lon)    302.60  1936    1932  0.16    0.26</span></span>
-<span id="cb21-8"><a href="#cb21-8" tabindex="-1"></a><span class="co">#&gt;         s(lat)    409.09  1936    1932  0.21    0.08</span></span>
+<span id="cb21-7"><a href="#cb21-7" tabindex="-1"></a><span class="co">#&gt;         s(lon)    302.60  1936    1932  0.16    0.01</span></span>
+<span id="cb21-8"><a href="#cb21-8" tabindex="-1"></a><span class="co">#&gt;         s(lat)    409.09  1936    1932  0.21    0.04</span></span>
 <span id="cb21-9"><a href="#cb21-9" tabindex="-1"></a><span class="co">#&gt;       residual   5190.31  5906    5902  0.88   13.53</span></span>
 <span id="cb21-10"><a href="#cb21-10" tabindex="-1"></a><span class="co">#&gt; </span></span>
 <span id="cb21-11"><a href="#cb21-11" tabindex="-1"></a><span class="co">#&gt;  Total Effective Dimension: 5906</span></span></code></pre></div>
@@ -728,7 +728,7 @@ local changes in Sea Surface Temperatures in this region.</p>
 <span id="cb27-8"><a href="#cb27-8" tabindex="-1"></a><span class="co">#&gt;           Term Effective Model Nominal Ratio Penalty</span></span>
 <span id="cb27-9"><a href="#cb27-9" tabindex="-1"></a><span class="co">#&gt;    (Intercept)      1.00     1       1  1.00    0.00</span></span>
 <span id="cb27-10"><a href="#cb27-10" tabindex="-1"></a><span class="co">#&gt;  lin(lon, lat)      3.00     3       3  1.00    0.00</span></span>
-<span id="cb27-11"><a href="#cb27-11" tabindex="-1"></a><span class="co">#&gt;         s(lon)    755.49  5329    5325  0.14    0.00</span></span>
+<span id="cb27-11"><a href="#cb27-11" tabindex="-1"></a><span class="co">#&gt;         s(lon)    755.49  5329    5325  0.14    0.01</span></span>
 <span id="cb27-12"><a href="#cb27-12" tabindex="-1"></a><span class="co">#&gt;         s(lat)    689.68  5329    5325  0.13    0.00</span></span>
 <span id="cb27-13"><a href="#cb27-13" tabindex="-1"></a><span class="co">#&gt;       residual   6263.84  7713    7709  0.81    6.65</span></span>
 <span id="cb27-14"><a href="#cb27-14" tabindex="-1"></a><span class="co">#&gt; </span></span>
@@ -827,10 +827,10 @@ interval <span class="math inline">\([0,1]\)</span> and defined by:</p>
 <span id="cb33-6"><a href="#cb33-6" tabindex="-1"></a><span class="co">#&gt; Table with effective dimensions and penalties: </span></span>
 <span id="cb33-7"><a href="#cb33-7" tabindex="-1"></a><span class="co">#&gt; </span></span>
 <span id="cb33-8"><a href="#cb33-8" tabindex="-1"></a><span class="co">#&gt;         Term Effective Model Nominal Ratio Penalty</span></span>
-<span id="cb33-9"><a href="#cb33-9" tabindex="-1"></a><span class="co">#&gt;  (Intercept)      1.00     1       1  1.00       0</span></span>
-<span id="cb33-10"><a href="#cb33-10" tabindex="-1"></a><span class="co">#&gt;       lin(x)      1.00     1       1  1.00       0</span></span>
-<span id="cb33-11"><a href="#cb33-11" tabindex="-1"></a><span class="co">#&gt;         s(x)      6.54    53      51  0.13       0</span></span>
-<span id="cb33-12"><a href="#cb33-12" tabindex="-1"></a><span class="co">#&gt;     residual    141.46   150     148  0.96       1</span></span>
+<span id="cb33-9"><a href="#cb33-9" tabindex="-1"></a><span class="co">#&gt;  (Intercept)      1.00     1       1  1.00    0.00</span></span>
+<span id="cb33-10"><a href="#cb33-10" tabindex="-1"></a><span class="co">#&gt;       lin(x)      1.00     1       1  1.00    0.00</span></span>
+<span id="cb33-11"><a href="#cb33-11" tabindex="-1"></a><span class="co">#&gt;         s(x)      6.54    53      51  0.13   27.25</span></span>
+<span id="cb33-12"><a href="#cb33-12" tabindex="-1"></a><span class="co">#&gt;     residual    141.46   150     148  0.96    1.00</span></span>
 <span id="cb33-13"><a href="#cb33-13" tabindex="-1"></a><span class="co">#&gt; </span></span>
 <span id="cb33-14"><a href="#cb33-14" tabindex="-1"></a><span class="co">#&gt;  Total Effective Dimension: 150</span></span></code></pre></div>
 <p>Making predictions and plotting the data is similar to the Gaussian
@@ -891,10 +891,10 @@ and for the response using <code>cbind(succes, failure)</code>:</p>
 <span id="cb36-6"><a href="#cb36-6" tabindex="-1"></a><span class="co">#&gt; Table with effective dimensions and penalties: </span></span>
 <span id="cb36-7"><a href="#cb36-7" tabindex="-1"></a><span class="co">#&gt; </span></span>
 <span id="cb36-8"><a href="#cb36-8" tabindex="-1"></a><span class="co">#&gt;         Term Effective Model Nominal Ratio Penalty</span></span>
-<span id="cb36-9"><a href="#cb36-9" tabindex="-1"></a><span class="co">#&gt;  (Intercept)      1.00     1       1  1.00       0</span></span>
-<span id="cb36-10"><a href="#cb36-10" tabindex="-1"></a><span class="co">#&gt;       lin(x)      1.00     1       1  1.00       0</span></span>
-<span id="cb36-11"><a href="#cb36-11" tabindex="-1"></a><span class="co">#&gt;         s(x)      5.85    53      51  0.11       0</span></span>
-<span id="cb36-12"><a href="#cb36-12" tabindex="-1"></a><span class="co">#&gt;     residual     92.15   100      98  0.94       1</span></span>
+<span id="cb36-9"><a href="#cb36-9" tabindex="-1"></a><span class="co">#&gt;  (Intercept)      1.00     1       1  1.00    0.00</span></span>
+<span id="cb36-10"><a href="#cb36-10" tabindex="-1"></a><span class="co">#&gt;       lin(x)      1.00     1       1  1.00    0.00</span></span>
+<span id="cb36-11"><a href="#cb36-11" tabindex="-1"></a><span class="co">#&gt;         s(x)      5.85    53      51  0.11    8.39</span></span>
+<span id="cb36-12"><a href="#cb36-12" tabindex="-1"></a><span class="co">#&gt;     residual     92.15   100      98  0.94    1.00</span></span>
 <span id="cb36-13"><a href="#cb36-13" tabindex="-1"></a><span class="co">#&gt; </span></span>
 <span id="cb36-14"><a href="#cb36-14" tabindex="-1"></a><span class="co">#&gt;  Total Effective Dimension: 100</span></span></code></pre></div>
 <p>Making predictions can be done as shown before in the other
@@ -964,10 +964,10 @@ depend on a single variable <span class="math inline">\(x\)</span>:</p>
 <span id="cb41-6"><a href="#cb41-6" tabindex="-1"></a><span class="co">#&gt; Table with effective dimensions and penalties: </span></span>
 <span id="cb41-7"><a href="#cb41-7" tabindex="-1"></a><span class="co">#&gt; </span></span>
 <span id="cb41-8"><a href="#cb41-8" tabindex="-1"></a><span class="co">#&gt;         Term Effective Model Nominal Ratio Penalty</span></span>
-<span id="cb41-9"><a href="#cb41-9" tabindex="-1"></a><span class="co">#&gt;  (Intercept)      3.00     3       3  1.00       0</span></span>
-<span id="cb41-10"><a href="#cb41-10" tabindex="-1"></a><span class="co">#&gt;       lin(x)      3.00     3       3  1.00       0</span></span>
-<span id="cb41-11"><a href="#cb41-11" tabindex="-1"></a><span class="co">#&gt;         s(x)      6.03    60      54  0.11       0</span></span>
-<span id="cb41-12"><a href="#cb41-12" tabindex="-1"></a><span class="co">#&gt;     residual    287.97   300     294  0.98       1</span></span>
+<span id="cb41-9"><a href="#cb41-9" tabindex="-1"></a><span class="co">#&gt;  (Intercept)      3.00     3       3  1.00    0.00</span></span>
+<span id="cb41-10"><a href="#cb41-10" tabindex="-1"></a><span class="co">#&gt;       lin(x)      3.00     3       3  1.00    0.00</span></span>
+<span id="cb41-11"><a href="#cb41-11" tabindex="-1"></a><span class="co">#&gt;         s(x)      6.03    60      54  0.11    2.14</span></span>
+<span id="cb41-12"><a href="#cb41-12" tabindex="-1"></a><span class="co">#&gt;     residual    287.97   300     294  0.98    1.00</span></span>
 <span id="cb41-13"><a href="#cb41-13" tabindex="-1"></a><span class="co">#&gt; </span></span>
 <span id="cb41-14"><a href="#cb41-14" tabindex="-1"></a><span class="co">#&gt;  Total Effective Dimension: 300</span></span></code></pre></div>
 <p>The predictions are given by:</p>
@@ -1031,13 +1031,10 @@ for details:</p>
 <span id="cb45-5"><a href="#cb45-5" tabindex="-1"></a>cN <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="dv">1</span> <span class="sc">/</span> <span class="fu">sqrt</span>(N <span class="sc">-</span> <span class="dv">1</span>), <span class="fu">rep</span>(<span class="dv">0</span>, N <span class="sc">-</span> <span class="dv">2</span>), <span class="dv">1</span> <span class="sc">/</span> <span class="fu">sqrt</span>(N <span class="sc">-</span> <span class="dv">1</span>))</span>
 <span id="cb45-6"><a href="#cb45-6" tabindex="-1"></a>D <span class="ot">&lt;-</span> <span class="fu">diff</span>(<span class="fu">diag</span>(N), <span class="at">diff =</span> <span class="dv">1</span>)</span>
 <span id="cb45-7"><a href="#cb45-7" tabindex="-1"></a>Delta <span class="ot">&lt;-</span> <span class="fl">0.5</span> <span class="sc">*</span> <span class="fu">crossprod</span>(D)</span>
-<span id="cb45-8"><a href="#cb45-8" tabindex="-1"></a>LVinv <span class="ot">&lt;-</span> <span class="fl">0.5</span> <span class="sc">*</span> (<span class="dv">2</span> <span class="sc">*</span> Delta <span class="sc">+</span> cN <span class="sc">%*%</span> <span class="fu">t</span>(cN))</span>
-<span id="cb45-9"><a href="#cb45-9" tabindex="-1"></a>lGinv <span class="ot">&lt;-</span> <span class="fu">list</span>(<span class="at">plotF =</span> LVinv)</span>
-<span id="cb45-10"><a href="#cb45-10" tabindex="-1"></a></span>
-<span id="cb45-11"><a href="#cb45-11" tabindex="-1"></a>LVinv <span class="ot">&lt;-</span> Matrix<span class="sc">::</span><span class="fu">Matrix</span>(LVinv, <span class="at">sparse =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb45-12"><a href="#cb45-12" tabindex="-1"></a><span class="fu">rownames</span>(LVinv) <span class="ot">&lt;-</span> <span class="fu">colnames</span>(LVinv) <span class="ot">&lt;-</span> <span class="fu">as.character</span>(<span class="fu">seq_len</span>(<span class="fu">nrow</span>(LVinv)))</span>
-<span id="cb45-13"><a href="#cb45-13" tabindex="-1"></a><span class="do">## Add LVinv to list, with name corresponding to random term.</span></span>
-<span id="cb45-14"><a href="#cb45-14" tabindex="-1"></a>lGinv <span class="ot">&lt;-</span> <span class="fu">as.ginverse</span>(<span class="fu">list</span>(<span class="at">plotF =</span> LVinv))</span></code></pre></div>
+<span id="cb45-8"><a href="#cb45-8" tabindex="-1"></a>LVinv <span class="ot">&lt;-</span> spam<span class="sc">::</span><span class="fu">as.spam</span>(<span class="fl">0.5</span> <span class="sc">*</span> (<span class="dv">2</span> <span class="sc">*</span> Delta <span class="sc">+</span> cN <span class="sc">%*%</span> <span class="fu">t</span>(cN)))</span>
+<span id="cb45-9"><a href="#cb45-9" tabindex="-1"></a></span>
+<span id="cb45-10"><a href="#cb45-10" tabindex="-1"></a>lGinv <span class="ot">&lt;-</span> <span class="fu">as.ginverse</span>(<span class="at">precisionMatrices  =</span> <span class="fu">list</span>(<span class="at">plotF =</span> LVinv),</span>
+<span id="cb45-11"><a href="#cb45-11" tabindex="-1"></a>                     <span class="at">levels =</span> <span class="fu">list</span>(<span class="at">plotF =</span> <span class="fu">as.character</span>(<span class="fu">seq_len</span>(N))))</span></code></pre></div>
 <p>Given the precision matrix for the LV model we can define the model
 in LMMsolve using the <code>random</code> and <code>ginverse</code>
 arguments:</p>
@@ -1106,10 +1103,10 @@ measurement error.</p>
 <span id="cb52-2"><a href="#cb52-2" tabindex="-1"></a><span class="co">#&gt; Table with effective dimensions and penalties: </span></span>
 <span id="cb52-3"><a href="#cb52-3" tabindex="-1"></a><span class="co">#&gt; </span></span>
 <span id="cb52-4"><a href="#cb52-4" tabindex="-1"></a><span class="co">#&gt;         Term Effective Model Nominal Ratio Penalty</span></span>
-<span id="cb52-5"><a href="#cb52-5" tabindex="-1"></a><span class="co">#&gt;  (Intercept)      1.00     1       1  1.00    0.00</span></span>
-<span id="cb52-6"><a href="#cb52-6" tabindex="-1"></a><span class="co">#&gt;     lin(das)      1.00     1       1  1.00    0.00</span></span>
-<span id="cb52-7"><a href="#cb52-7" tabindex="-1"></a><span class="co">#&gt;       s(das)      6.46    53      51  0.13    0.01</span></span>
-<span id="cb52-8"><a href="#cb52-8" tabindex="-1"></a><span class="co">#&gt;     residual    112.54   121     119  0.95    0.00</span></span>
+<span id="cb52-5"><a href="#cb52-5" tabindex="-1"></a><span class="co">#&gt;  (Intercept)      1.00     1       1  1.00       0</span></span>
+<span id="cb52-6"><a href="#cb52-6" tabindex="-1"></a><span class="co">#&gt;     lin(das)      1.00     1       1  1.00       0</span></span>
+<span id="cb52-7"><a href="#cb52-7" tabindex="-1"></a><span class="co">#&gt;       s(das)      6.46    53      51  0.13       0</span></span>
+<span id="cb52-8"><a href="#cb52-8" tabindex="-1"></a><span class="co">#&gt;     residual    112.54   121     119  0.95       0</span></span>
 <span id="cb52-9"><a href="#cb52-9" tabindex="-1"></a><span class="co">#&gt; </span></span>
 <span id="cb52-10"><a href="#cb52-10" tabindex="-1"></a><span class="co">#&gt;  Total Effective Dimension: 121</span></span></code></pre></div>
 <p>The fitted smooth trend can be obtained as explained before:</p>

@@ -1,5 +1,5 @@
 #' @keywords internal
-setClass("ADchol",
+setClass("LMMsolver.chol",
          slots = c(supernodes = "numeric",
                    rowpointers = "numeric",
                    colpointers = "numeric",
@@ -7,54 +7,141 @@ setClass("ADchol",
                    pivot = "numeric",
                    invpivot = "numeric",
                    entries = "numeric",
-                   ADentries  = "numeric",
-                   P = "matrix"))
+                   ADentries  = "numeric"))
 
 
-#' construct object for Automated Differentiation Cholesky decomposition
-#'
-#' Construct object for reverse Automated Differentiation of Cholesky decomposition,
-#' with as input a list of semi-positive symmetric sparse matrices \eqn{P_i}, each of
-#' dimension \eqn{q \times q}. The function \code{ADchol} calculates the matrix \eqn{C}, the sum
-#' the precision matrices \eqn{P_i}: \eqn{C = \sum_{i}  P_i}. Next, it calculates the Cholesky
-#' Decomposition using the multiple minimum degree (MMD) algorithm
-#' of the \code{spam} package.
-#'
-#' @param lP a list of symmetric matrices of class spam, each of dimension \eqn{q \times q},
-#' and with sum of the matrices assumed to be positive definite.
-#
-#' @returns An object of class \code{ADchol}. This object is used to calculate the partial
-#' partial derivatives of \eqn{log|C|} in an efficient way.
-#'
-#' @references
-#' Furrer, R., & Sain, S. R. (2010). spam: A sparse matrix R package with emphasis
-#' on MCMC methods for Gaussian Markov random fields.
-#' Journal of Statistical Software, 36, 1-25.
-#'
-#' @importFrom methods new
-#' @keywords internal
-ADchol <- function(lP) {
-  C <- Reduce(`+`, lP)
-  opt <- summary(C)
-  cholC <- chol(C, memory = list(nnzR = 8 * opt$nnz,
-                                 nnzcolindices = 4 * opt$nnz))
-  # reorder the matrices in list lP by double transpose, row-permutations are much faster
-  # than column permutations (see help permutation() function in spam library)
-  lQ <- lapply(lP, function(x) {
-    z <- x[cholC@pivot,]
-    tz <- spam::t(z)
-    tz <- tz[cholC@pivot,]
-    return(spam::t(tz)) })
-  L <- construct_ADchol_Rcpp(cholC, lQ)
-  new("ADchol",
-      supernodes = L$supernodes,
-      rowpointers = L$rowpointers,
-      colpointers = L$colpointers,
-      rowindices = L$rowindices,
-      pivot = L$pivot,
-      invpivot = L$invpivot,
-      entries = L$entries,
-      ADentries = L$ADentries,
-      P = L$P)
+SparseCholesky <- function(C, init = TRUE) {
+
+  ## C can be either a spam matrix or an existing
+  ## spam Ng-Peyton Cholesky object.
+  if (methods::is(C, "spam.chol.NgPeyton")) {
+
+    cholC <- C
+
+  } else {
+
+    opt <- summary(C)
+
+    cholC <- suppressWarnings(
+      chol(C,
+           memory = list(nnzR = 8 * opt$nnz,
+                         nnzcolindices = 4 * opt$nnz))
+    )
+  }
+
+  N_entries <- length(cholC@entries)
+
+  # Exchange row and columns compared to spam object,
+  # as in Ng and Peyton 1993.
+  # LMMsolver.chol uses C-index (0) instead of R-index (1).
+  obj <- methods::new(
+    "LMMsolver.chol",
+    supernodes = cholC@supernodes - 1,
+    colpointers = cholC@rowpointers - 1,
+    rowpointers = cholC@colpointers - 1,
+    rowindices = cholC@colindices - 1,
+    pivot = cholC@pivot - 1,
+    invpivot = cholC@invpivot - 1,
+    entries = rep(0, N_entries),
+    ADentries = rep(0, N_entries)
+  )
+
+  if (init) {
+    ## Calculate the numerical factor and AD entries.
+    obj@entries <- vec(obj, C)
+
+    L <- update_Rcpp_fun(obj)
+
+    obj@entries <- L$entries
+    obj@ADentries <- L$ADentries
+  }
+
+  obj
 }
+
+
+setMethod("update", "LMMsolver.chol",
+          function(object, C, ...) {
+            object@entries <- vec(object, C)
+            L <- update_Rcpp_fun(object)
+            object@entries <- L$entries
+            object@ADentries <- L$ADentries
+            object
+          })
+
+
+setMethod("solve", "LMMsolver.chol",
+          function(a, b, ...) {
+            solve_Rcpp_fun(a, b)
+          })
+
+
+updateLinear <- function(object, V, theta) {
+  object@entries <- as.vector(V %*% theta)
+  L <- update_Rcpp_fun(object)
+  object@entries <- L$entries
+  object@ADentries <- L$ADentries
+  object
+}
+
+
+logdet <- function(object) {
+  logdet_Rcpp_fun(object)
+}
+
+
+# Generic for derivative of log determinant
+dlogdet <- function(obj, ...) {
+  UseMethod("dlogdet")
+}
+
+
+# Derivative for LMMsolver.chol
+#' @exportS3Method
+dlogdet.LMMsolver.chol <- function(obj, dC, ...) {
+  dF <- obj@ADentries
+  v <- vec(obj, dC)
+  sum(dF * v)
+}
+
+
+dlogdetLinear <- function(obj, V, theta) {
+  g <- as.vector(crossprod(obj@ADentries, V))
+
+  n <- length(obj@pivot)
+
+  # Correct numerical error using the homogeneity identity
+  # sum(theta * g) = n.
+  n * g / sum(theta * g)
+}
+
+
+vecList <- function(obj, x) {
+  do.call(cbind, lapply(x, function(dC) vec(obj, dC)))
+}
+
+
+# ADchol, for backward compatibility
+
+ADchol <- function(lP) {
+  C0 <- Reduce(`+`, lP)
+  obj <- SparseCholesky(C0)
+
+  structure(
+    list(
+      chol = obj,
+      V = vecList(obj, lP)
+    ),
+    class = "ADchol"
+  )
+}
+
+
+# Derivative for the old ADchol object
+#' @exportS3Method
+dlogdet.ADchol <- function(obj, theta, ...) {
+  obj$chol <- updateLinear(obj$chol, obj$V, theta)
+  dlogdetLinear(obj$chol, obj$V, theta)
+}
+
 

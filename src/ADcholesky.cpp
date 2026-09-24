@@ -1,23 +1,31 @@
-// Backwards Automated Differentiation of Cholesky Algorithm
-// to calculate the partial derivatives of log-determinant of
+// Backwards Automatic Differentiation of the Cholesky Algorithm
+// for calculating partial derivatives of the log-determinant of
 // positive definite symmetric sparse matrices.
 //
-// References:
-// Ng, Esmond G., and Barry W. Peyton.,
-// "Block sparse Cholesky algorithms on advanced uniprocessor computers."
-// SIAM Journal on Scientific Computing 14, no. 5 (1993): 1034-1056.
+// The algorithm combines the sparse Cholesky factorization of
+// Ng and Peyton (1993) with the reverse differentiation approach
+// of Smith (1995).
 //
-// Furrer, Reinhard, and Stephan R. Sain.
+// References:
+//
+// Ng, E. G. and B. W. Peyton (1993).
+// "Block sparse Cholesky algorithms on advanced uniprocessor computers."
+// SIAM Journal on Scientific Computing 14, 1034-1056.
+//
+// Furrer, R. and S. R. Sain (2010).
 // "spam: A sparse matrix R package with emphasis on MCMC
 // methods for Gaussian Markov random fields."
-// Journal of Statistical Software 36 (2010): 1-25.
+// Journal of Statistical Software 36, 1-25.
 //
-// Smith, Stephen P. "Differentiation of the Cholesky algorithm."
-// Journal of Computational and Graphical Statistics 4, no. 2 (1995): 134-147.
+// Smith, S. P. (1995).
+// "Differentiation of the Cholesky algorithm."
+// Journal of Computational and Graphical Statistics 4, 134-147.
 //
-// S.P. Smith 2000, A TUTORIAL ON SIMPLICITY AND COMPUTATIONAL DIFFERENTIATION FOR
-// STATISTICIANS
+// Smith, S. P. (2000).
+// "A Tutorial on Simplicity and Computational Differentiation
+// for Statisticians."
 //
+// Implementation by Martin Boer, 2026.
 
 #include <Rcpp.h>
 #include <set>
@@ -25,146 +33,151 @@
 #include "AuxFun.h"
 #include "SparseMatrix.h"
 #include "cholesky.h"
+#include "ADcholesky.h"
 
 using namespace Rcpp;
 using namespace std;
 
-// U is a cholesky matrix
-// ZtZ is crossproduct design matrix Z
-// P is a precision matrix.
-// [[Rcpp::export]]
-List construct_ADchol_Rcpp(Rcpp::S4 obj_spam,
-                           const List& P_list) {
-  IntegerVector supernodes = GetIntVector(obj_spam, "supernodes", 0);
 
-  // Exchange row and columns compared to spam object, as in Ng and Peyton 1993
-  IntegerVector colpointers = GetIntVector(obj_spam, "rowpointers", 0);
-  IntegerVector rowpointers = GetIntVector(obj_spam, "colpointers", 0);
-  IntegerVector rowindices = GetIntVector(obj_spam, "colindices", 0);
+// ============================================================
+// AD update of one target column using 4 consecutive source
+// columns.
+//
+// For each source column k:
+//
+//   f[i,k] -= f[i,j] * L[j,k]
+//   f[j,k] -= f[i,j] * L[i,k]
+//
+// The first source entry L[j,k] is also F[j,k], so the first
+// row contributes twice to F[j,k]. This is handled explicitly.
+// ============================================================
 
-  IntegerVector pivot = GetIntVector(obj_spam, "pivot", 0);
-  IntegerVector invpivot = GetIntVector(obj_spam, "invpivot", 0);
+inline void update_AD_column_cmod1_unroll4(
+    double* f,
+    const double* l,
+    int s,
+    int e,
+    int j,
+    int k0,
+    const IntegerVector& colpointers)
+{
+  // ----------------------------------------------------------
+  // First positions of the four source columns.
+  // These are the L[j,k] values and also the F[j,k] values.
+  // ----------------------------------------------------------
 
-  IntegerVector Dim = Rcpp::clone<Rcpp::IntegerVector>(obj_spam.slot("dimension"));
+  const int jk0 = colpointers[k0] + (j - k0);
+  const int jk1 = colpointers[k0 + 1] + (j - (k0 + 1));
+  const int jk2 = colpointers[k0 + 2] + (j - (k0 + 2));
+  const int jk3 = colpointers[k0 + 3] + (j - (k0 + 3));
 
-  // copy not really needed or used ...
-  NumericVector entries = Rcpp::clone<Rcpp::NumericVector>(obj_spam.slot("entries"));
-  NumericVector ADentries = Rcpp::clone<Rcpp::NumericVector>(obj_spam.slot("entries"));
+  const double a0 = l[jk0];
+  const double a1 = l[jk1];
+  const double a2 = l[jk2];
+  const double a3 = l[jk3];
 
-  const int Nsupernodes = supernodes.size()-1;
-  const int N = colpointers.size() - 1;
-  const int size = colpointers[N];
-  const int n_prec_matrices = P_list.size();
-  NumericMatrix P_matrix(size, n_prec_matrices);
-  for (int i=0;i<n_prec_matrices;i++)
+  // ----------------------------------------------------------
+  // First target row.
+  //
+  // Here source F[j,k] and fjk are the same element, so the
+  // original code subtracts the contribution twice.
+  // ----------------------------------------------------------
+
+  const double f0 = f[s];
+
+  double g0 = f[jk0] - 2.0 * f0 * a0;
+  double g1 = f[jk1] - 2.0 * f0 * a1;
+  double g2 = f[jk2] - 2.0 * f0 * a2;
+  double g3 = f[jk3] - 2.0 * f0 * a3;
+
+  // Remaining rows.
+
+  const double* p0 = l + jk0 + 1;
+  const double* p1 = l + jk1 + 1;
+  const double* p2 = l + jk2 + 1;
+  const double* p3 = l + jk3 + 1;
+
+  double* q0 = f + jk0 + 1;
+  double* q1 = f + jk1 + 1;
+  double* q2 = f + jk2 + 1;
+  double* q3 = f + jk3 + 1;
+
+  for (int i = s + 1; i < e; ++i)
   {
-    Rcpp::S4 obj(P_list[i]);
-    IntegerVector rowpointers_P = GetIntVector(obj, "rowpointers", 0);
-    IntegerVector colindices_P  = GetIntVector(obj, "colindices", 0);
-    NumericVector entries_P     = obj.slot("entries");
+    const double fij = f[i];
 
-    vector<double> result(size, 0.0);
-    for (int J=0; J<Nsupernodes;J++)
-    {
-      for (int j=supernodes[J]; j<supernodes[J+1]; j++)
-      {
-        int k = rowpointers[J+1]-1;   // start at end/bottom
-        int ndx = colpointers[j+1]-1; // start at end/bottom
-        for (int ll=rowpointers_P[j+1]-1;ll>=rowpointers_P[j];ll--)
-        {
-          int c = colindices_P[ll];
-          if (c < j) break;
-          while( rowindices[k] != c)
-          {
-            k--;
-            ndx--;
-          }
-          result[ndx] = entries_P[ll];
-          if (c == j) break;
-        }
-      }
-    }
+    *q0++ -= fij * a0;
+    g0   -= fij * (*p0++);
 
-    for (int j=0;j<size;j++)
-    {
-      P_matrix(j,i) = result[j];
-    }
+    *q1++ -= fij * a1;
+    g1   -= fij * (*p1++);
+
+    *q2++ -= fij * a2;
+    g2   -= fij * (*p2++);
+
+    *q3++ -= fij * a3;
+    g3   -= fij * (*p3++);
   }
 
-  List L;
-  L["supernodes"] = supernodes;
-  L["colpointers"] = colpointers;
-  L["rowpointers"] = rowpointers;
-  L["rowindices"] =  rowindices;
-  L["pivot"] = pivot;
-  L["invpivot"] = invpivot;
-  L["entries"] = entries;
-  L["ADentries"] = ADentries;
-  L["P"] = P_matrix;
-  return L;
+  // ----------------------------------------------------------
+  // Write back F[j,k].
+  // ----------------------------------------------------------
+
+  f[jk0] = g0;
+  f[jk1] = g1;
+  f[jk2] = g2;
+  f[jk3] = g3;
 }
 
 
-// j is current column in Supernode J
-void ADcmod1(NumericVector& F,
-             const NumericVector& L, int j, int J,
-             const IntegerVector& supernodes,
-             const IntegerVector& colpointers)
-{
-  int s = colpointers[j];
-  int e = colpointers[j+1];
-  // for all columns in supernode J left to j:
-  for (int k=supernodes[J];k<j;k++)
-  {
-    int jk = colpointers[k] + (j-k);
-    int ik = jk;
-    double& Fjk = F[jk];
-    const double& Ljk = L[jk];
-    for (int ij=s; ij<e; ij++)
-    {
-      // F[ik] = F[ik] - F[ij]*L[jk];
-      // F[jk] = F[jk] - F[ij]*L[ik];
-      F[ik] -= F[ij]*Ljk;
-      Fjk   -= F[ij]*L[ik];
-      ik++;
-    }
-  }
-}
+// ============================================================
+// ADcmod1 using source-column unrolling
+// ============================================================
 
-// Adjust column j for all columns in supernode K:
-void ADcmod2(NumericVector& F,
-            const NumericVector& L, int j, int K, int sz,
-           NumericVector& t,
-           const IntegerVector& indmap,
-           const IntegerVector& supernodes,
-           const IntegerVector& rowpointers,
-           const IntegerVector& colpointers,
-           const IntegerVector& rowindices)
+void ADcmod1(
+    NumericVector& F,
+    const NumericVector& L,
+    int j,
+    int J,
+    const IntegerVector& supernodes,
+    const IntegerVector& colpointers)
 {
-  // t is dense version of L[j], updated values at end of function:
-  int i=0;
-  for (int r = rowpointers[K+1] - 1;r>=rowpointers[K];r--)
+  const double* l = L.begin();
+
+  double* f = F.begin();
+
+  const int s = colpointers[j];
+  const int e = colpointers[j + 1];
+
+  const int kstart = supernodes[J];
+  const int nsrc = j - kstart;
+
+  // Complete groups of four source columns.
+  const int n4 = (nsrc / 4) * 4;
+
+  int k = kstart;
+
+  for (; k < kstart + n4; k += 4)
   {
-    int ndx = rowindices[r];
-    int pos = colpointers[j+1] - 1 - indmap[ndx];
-    t[i++] = F[pos];
+    update_AD_column_cmod1_unroll4(f, l, s, e, j, k, colpointers);
   }
 
-  // for all columns k in supernode K:
-  for (int k=supernodes[K]; k<supernodes[K+1]; k++)
+  // ----------------------------------------------------------
+  // Remaining source columns.
+  for (; k < j; ++k)
   {
-    int jk = colpointers[k+1]-sz;
+    const int jk = colpointers[k] + (j - k);
     int ik = jk;
-    const double& Ljk = L[jk];
-    double& Fjk = F[jk];
-    for (int i=sz-1;i>=0;i--)
+
+    double& fjk = f[jk];
+
+    const double Ljk = l[jk];
+
+    for (int ij = s; ij < e; ++ij)
     {
-      // F[ik] = F[ik] - F_ij*L[jk];
-      // F[jk] = F[jk] - F_ij*L[ik];
-      double F_ij = t[i];
-      F[ik] -= F_ij*Ljk;
-      Fjk   -= F_ij*L[ik];
-      ik++;
+      f[ik] -= f[ij] * Ljk;
+      fjk   -= f[ij] * l[ik];
+      ++ik;
     }
   }
 }
@@ -172,82 +185,378 @@ void ADcmod2(NumericVector& F,
 void ADcdiv(NumericVector& F,
             const NumericVector& L, int j, const IntegerVector& colpointers)
 {
+  const double *l = L.begin();
+  double *f = F.begin();
+
   const int s = colpointers[j];
   const int e = colpointers[j+1];
 
   // update AD for column j:
-  const double& Ls = L[s];
-  double& Fs = F[s];
+  const double Ls = l[s];
+  double Fs = f[s];
   for (int i = s + 1; i < e; i++)
   {
     // F[i] = F[i]/L[s];
     // F[s] = F[s] - L[i]*F[i];
-    F[i] /= Ls;
-    Fs -= L[i]*F[i];
+    f[i] /= Ls;
+    Fs -= l[i]*f[i];
   }
   //F[s] = Fs;
-  F[s] = 0.5*F[s]/Ls;
+  f[s] = 0.5*Fs/Ls;
 }
 
-void ADcholesky(NumericVector& F,
-              const NumericVector& L,
-              const IntegerVector& supernodes,
-              const IntegerVector& rowpointers,
-              const IntegerVector& colpointers,
-              const IntegerVector& rowindices)
+// ============================================================
+// AD update of one target column from 4 source columns.
+// ============================================================
+
+inline void update_AD_column_cmod2_unroll4(
+    double* f,
+    const double* l,
+    const double* t,
+    int sz,
+    int k0,
+    const IntegerVector& colpointers)
 {
-  const int N = colpointers.size() - 1;
-  const int Nsupernodes = supernodes.size()-1;
+  const int p0 = colpointers[k0 + 1] - sz;
+  const int p1 = colpointers[k0 + 2] - sz;
+  const int p2 = colpointers[k0 + 3] - sz;
+  const int p3 = colpointers[k0 + 4] - sz;
 
-  // linked lists, see section 4.2 Ng and Peyton
-  IntegerVector HEAD(N,-1);
-  IntegerVector LINK(Nsupernodes,-1);
+  const double a0 = l[p0];
+  const double a1 = l[p1];
+  const double a2 = l[p2];
+  const double a3 = l[p3];
 
-  IntegerVector colhead = clone(rowpointers);
-  IntegerVector coltop = clone(rowpointers);
-  for (int J=0; J<Nsupernodes;J++)
+  // ----------------------------------------------------------
+  // F[j,k] = F[j,k]
+  //             - 2 * t[sz-1] * L[j,k]
+  //
+  // This is the overlap of the two reverse updates.
+  // ----------------------------------------------------------
+
+  const double fij = t[sz - 1];
+
+  double g0 = f[p0] - 2.0 * fij * a0;
+  double g1 = f[p1] - 2.0 * fij * a1;
+  double g2 = f[p2] - 2.0 * fij * a2;
+  double g3 = f[p3] - 2.0 * fij * a3;
+
+  // Remaining source elements.
+  const double* lp0 = l + p0 + 1;
+  const double* lp1 = l + p1 + 1;
+  const double* lp2 = l + p2 + 1;
+  const double* lp3 = l + p3 + 1;
+  double* fp0 = f + p0 + 1;
+  double* fp1 = f + p1 + 1;
+  double* fp2 = f + p2 + 1;
+  double* fp3 = f + p3 + 1;
+
+  for (int i = sz - 2; i >= 0; --i)
   {
-    int szNode = supernodes[J+1] - supernodes[J];
-    coltop[J] += szNode-1;
-    colhead[J] = rowpointers[J+1]-1;
-    if (colhead[J] > coltop[J])
+    const double Fij = t[i];
+
+    *fp0 -= Fij * a0;
+    *fp1 -= Fij * a1;
+    *fp2 -= Fij * a2;
+    *fp3 -= Fij * a3;
+
+    g0 -= Fij * (*lp0);
+    g1 -= Fij * (*lp1);
+    g2 -= Fij * (*lp2);
+    g3 -= Fij * (*lp3);
+
+    ++fp0;
+    ++fp1;
+    ++fp2;
+    ++fp3;
+
+    ++lp0;
+    ++lp1;
+    ++lp2;
+    ++lp3;
+  }
+
+  f[p0] = g0;
+  f[p1] = g1;
+  f[p2] = g2;
+  f[p3] = g3;
+}
+
+
+void ADcmod2(
+    NumericVector& F,
+    const NumericVector& L,
+    int j,
+    int K,
+    int sz,
+    NumericVector& t,
+    const IntegerVector& indmap,
+    const IntegerVector& supernodes,
+    const IntegerVector& rowpointers,
+    const IntegerVector& colpointers,
+    const IntegerVector& rowindices)
+{
+  const double* l = L.begin();
+  double* f = F.begin();
+  double* tp = t.begin();
+
+  const int eK = rowpointers[K + 1];
+  const int sCol = supernodes[K];
+  const int eCol = supernodes[K + 1];
+  const int srcWidth = eCol - sCol;
+
+  // Special case: one source column.
+  if (srcWidth == 1)
+  {
+    const int jk = colpointers[sCol + 1] - sz;
+    const double Ljk = l[jk];
+    double& Fjk = f[jk];
+
+    int r = eK - sz;
+    int ik = jk;
+
+    const int ref_pos = colpointers[j + 1] - 1;
+
+    for (int i = sz - 1; i >= 0; --i)
     {
-      int rNdx = rowindices[colhead[J]];
-      insert(HEAD, LINK, rNdx, J);
+      const int ndx = rowindices[r++];
+
+      const int pos = ref_pos - indmap[ndx];
+
+      // Copy before updating f[ik], since ik may equal pos.
+      const double Fij = f[pos];
+
+      f[ik] -= Fij * Ljk;
+      Fjk    -= Fij * l[ik];
+
+      ++ik;
+    }
+
+    return;
+  }
+
+  // Gather target AD values.
+  int r = eK - 1;
+
+  const int ref_pos = colpointers[j + 1] - 1;
+
+  for (int i = 0; i < sz; ++i)
+  {
+    const int ndx = rowindices[r--];
+
+    const int pos = ref_pos - indmap[ndx];
+
+    tp[i] = f[pos];
+  }
+
+  // Four source columns at a time.
+  const int n4 = (srcWidth / 4) * 4;
+
+  int k = sCol;
+
+  for (; k < sCol + n4; k += 4)
+  {
+    update_AD_column_cmod2_unroll4(f, l, tp, sz, k, colpointers);
+  }
+
+  // Remaining source columns.
+  for (; k < eCol; ++k)
+  {
+    const int jk = colpointers[k + 1] - sz;
+    const double Ljk = l[jk];
+    double& Fjk = f[jk];
+
+    int ik = jk;
+
+    for (int i = sz - 1; i >= 0; --i)
+    {
+      const double Fij = tp[i];
+
+      f[ik] -= Fij * Ljk;
+      Fjk    -= Fij * l[ik];
+
+      ++ik;
     }
   }
-  IntegerVector indmap(N,0);
-  NumericVector t(N);
-  for (int J=Nsupernodes-1; J>=0;J--)
+}
+
+
+// ADcholesky
+void ADcholesky(
+    NumericVector& F,
+    const NumericVector& L,
+    const IntegerVector& supernodes,
+    const IntegerVector& rowpointers,
+    const IntegerVector& colpointers,
+    const IntegerVector& rowindices)
+{
+  const int N = colpointers.size() - 1;
+  const int Nsupernodes = supernodes.size() - 1;
+
+  // ------------------------------------------------------------
+  // SNODE[j] = supernode containing scalar row/column j
+  // ------------------------------------------------------------
+
+  IntegerVector SNODE(N);
+
+  for (int J = 0; J < Nsupernodes; ++J)
   {
+    for (int j = supernodes[J]; j < supernodes[J + 1];++j)
+    {
+      SNODE[j] = J;
+    }
+  }
+
+  // ------------------------------------------------------------
+  // Reverse supernodal linked lists.
+  //
+  // HEAD[J]   = first source supernode K waiting to update J
+  // LINK[K]   = next source supernode on that list
+  //
+  // LENGTH[K] = number of rows of K already consumed from the
+  //              bottom of its off-diagonal part.
+  // ------------------------------------------------------------
+
+  IntegerVector HEAD(Nsupernodes, -1);
+  IntegerVector LINK(Nsupernodes, -1);
+  IntegerVector LENGTH(Nsupernodes, 0);
+
+  // ------------------------------------------------------------
+  // Initially schedule every supernode on the list of the
+  // supernode containing its last off-diagonal row.
+  // ------------------------------------------------------------
+
+  for (int K = 0; K < Nsupernodes; ++K)
+  {
+    const int width = supernodes[K + 1] - supernodes[K];
+    const int len = rowpointers[K + 1] - rowpointers[K];
+    const int offdiag = len - width;
+
+    LENGTH[K] = 0;
+
+    if (offdiag > 0)
+    {
+      const int last_row = rowindices[rowpointers[K + 1] - 1];
+      const int J = SNODE[last_row];
+
+      LINK[K] = HEAD[J];
+      HEAD[J] = K;
+    }
+  }
+
+  // ------------------------------------------------------------
+  // Workspace
+  // ------------------------------------------------------------
+
+  IntegerVector indmap(N, 0);
+
+  NumericVector t(N);
+
+  // ------------------------------------------------------------
+  // Reverse through supernodes
+  // ------------------------------------------------------------
+
+  for (int J = Nsupernodes - 1;J >= 0;--J)
+  {
+    const int j0 = supernodes[J];
+    const int j1 = supernodes[J + 1];
+
+    // Construct map for target supernode J.
     makeIndMap(indmap, J, rowpointers, rowindices);
-    for (int j = supernodes[J+1]-1; j>=supernodes[J]; j--)
+
+    // Reverse operations internal to J.
+    for (int j = j1 - 1; j >= j0;--j)
     {
       ADcdiv(F, L, j, colpointers);
       ADcmod1(F, L, j, J, supernodes, colpointers);
+    }
 
-      int K = HEAD[j];
-      while (K!=-1)
+    // ----------------------------------------------------------
+    // Process all source supernodes K waiting to update J.
+    // ----------------------------------------------------------
+
+    int K = HEAD[J];
+
+    HEAD[J] = -1;
+
+    while (K != -1)
+    {
+      // --------------------------------------------------------
+      // Save next source supernode.
+      // --------------------------------------------------------
+
+      const int nextK = LINK[K];
+      const int done = LENGTH[K];
+
+      const int row0 = rowpointers[K];
+      const int eK = rowpointers[K + 1];
+
+      const int widthK = supernodes[K + 1] - supernodes[K];
+
+      const int lenK = eK - row0;
+
+      const int offdiagK = lenK - widthK;
+
+      // --------------------------------------------------------
+      // Count rows of K belonging to J, moving upward from
+      // the current bottom.
+      // --------------------------------------------------------
+
+      int ncolup = 0;
+
+      while (done + ncolup < offdiagK)
       {
-        int nextK = LINK[K];
-        colhead[K]--;
-        if (colhead[K] > coltop[K])
-        {
-           int rNdx = rowindices[colhead[K]];
-           insert(HEAD, LINK, rNdx, K);
-        }
-        int sz = rowpointers[K+1] - 1 - colhead[K];
-        ADcmod2(F, L, j, K, sz, t, indmap, supernodes, rowpointers,colpointers,rowindices);
-        K = nextK;
+        const int row = rowindices[eK - 1 - done - ncolup];
+
+        if (row < j0)
+          break;
+
+        ++ncolup;
       }
-      HEAD[j] = -1;
+
+      // --------------------------------------------------------
+      // Reverse update, one target column at a time.
+      for (int p = 0; p < ncolup;++p)
+      {
+        const int j = rowindices[eK - 1 - done - p];
+        const int sz = done + p + 1;
+
+        ADcmod2(F, L, j, K, sz, t, indmap, supernodes,
+            rowpointers, colpointers, rowindices);
+      }
+
+      // --------------------------------------------------------
+      // Advance K further upward in its row list.
+      // --------------------------------------------------------
+
+      const int newdone = done + ncolup;
+
+      if (newdone < offdiagK)
+      {
+        const int next_row = rowindices[eK - 1 - newdone];
+
+        const int nextJ = SNODE[next_row];
+
+        LENGTH[K] = newdone;
+        LINK[K] = HEAD[nextJ];
+
+        HEAD[nextJ] = K;
+      }
+      else
+      {
+        LENGTH[K] = newdone;
+        LINK[K] = -1;
+      }
+
+      K = nextK;
     }
   }
-  return;
 }
+
 
 void initAD(NumericVector& F, const NumericVector& L, const IntegerVector& colpointers)
 {
+  std::fill(F.begin(), F.end(), 0.0);
   const int N = colpointers.size() - 1;
   for (int k=0;k<N;k++)
   {
@@ -255,243 +564,4 @@ void initAD(NumericVector& F, const NumericVector& L, const IntegerVector& colpo
     F[s] = 2.0/L[s];
   }
 }
-
-//' Calculate the partial derivatives of log-determinant.
-//'
-//' This function calculates the partial derivatives of the the log-determinant in an
-//' efficient way, by using reverse Automated Differentiation of the Cholesky Algorithm,
-//' see Smith (1995) for details. Let
-//'  \deqn{C = \sum_{i} \theta_i P_i}
-//' where the matrices \eqn{P_i} are stored in the `ADchol` object. The partial derivatives
-//' of matrix \eqn{C} are defined by:
-//' \deqn{\frac{\partial C}{\partial \theta_i} = \text{trace} [C^{-1} P_i]},
-//' but are calculated in a more efficient way using backwards Automated Differentiation.
-//'
-//' @param ADobj object of class ADchol.
-//' @param theta a vector with precision or penalty parameters
-//'
-//' @returns The gradient with partial derivatives of \eqn{log|C|} with respect to
-//' parameters \eqn{\theta_i}. As attribute \code{logdet}, \eqn{log|C|} is returned.
-//'
-//' @references
-//' Smith, S. P. (1995). Differentiation of the Cholesky algorithm.
-//' Journal of Computational and Graphical Statistics, 4(2), 134-147.
-//'
-//' @noRd
-//' @keywords internal
-//'
-// [[Rcpp::export]]
-NumericVector dlogdet(Rcpp::S4 obj, NumericVector theta,
-                      Nullable<NumericVector> b_ = R_NilValue)
-{
-  IntegerVector supernodes = obj.slot("supernodes");
-  IntegerVector rowpointers = obj.slot("rowpointers");
-  IntegerVector colpointers = obj.slot("colpointers");
-  IntegerVector rowindices = obj.slot("rowindices");
-  NumericVector L = obj.slot("entries");
-  NumericVector F = obj.slot("ADentries");
-  NumericMatrix P = obj.slot("P");
-
-  // define matrix L (lower triangle matrix values)
-  const int sz = P.nrow();
-
-  const int n_prec_mat = P.ncol();
-
-  if (n_prec_mat != theta.size()) {
-    stop("wrong length vector theta ");
-  }
-
-  std::fill(L.begin(), L.end(), 0.0);
-  std::fill(F.begin(), F.end(), 0.0);
-
-  for (int k=0;k<n_prec_mat;k++)
-  {
-    NumericMatrix::Column Pk = P(_, k);
-    double alpha = theta[k];
-    for (int i=0;i<sz;i++)
-    {
-      L[i] += alpha*Pk[i];
-    }
-  }
-  cholesky(L, supernodes, rowpointers, colpointers, rowindices);
-  double logDet = logdet(L, colpointers);
-
-  //NumericVector F(sz, 0.0);
-  initAD(F, L, colpointers);
-  ADcholesky(F, L, supernodes, rowpointers, colpointers, rowindices);
-
-  NumericVector gradient(n_prec_mat);
-  for (int k=0;k<n_prec_mat;k++)
-  {
-    NumericMatrix::Column Pk = P(_, k);
-    gradient[k] = std::inner_product(F.begin(), F.end(), Pk.begin(), 0.0);
-  }
-
-  // correction, to make sure inner product
-  // between theta and gradient equal to N:
-  double sum = 0.0;
-  const int N = colpointers.size()-1;
-  for (int i=0;i<n_prec_mat;i++)
-  {
-    sum += theta[i]*gradient[i];
-  }
-  for (int i=0;i<n_prec_mat;i++)
-  {
-    gradient[i] *= N/sum;
-  }
-
-  gradient.attr("logdet") = logDet;
-
-  if (b_.isNotNull()) {
-    NumericVector b(b_);        // casting to underlying type NumericVector
-    IntegerVector pivot = obj.slot("pivot");
-    IntegerVector invpivot = obj.slot("invpivot");
-
-    NumericVector z= forwardCholesky(L, b, supernodes, rowpointers,
-                             colpointers, rowindices, pivot, invpivot);
-    NumericVector x = backwardCholesky(L, z, supernodes, rowpointers,
-                     colpointers, rowindices, pivot, invpivot);
-    gradient.attr("x.coef") = x;
-  }
-  return gradient;
-}
-
-void updateH(NumericVector& H, const SparseMatrix& tX, int i, int j, double alpha)
-{
-  int s1 = tX.rowpointers[i];
-  int e1 = tX.rowpointers[i+1];
-
-  int s2 = tX.rowpointers[j];
-  int e2 = tX.rowpointers[j+1];
-
-  while (s1 != e1 && s2 != e2)
-  {
-    if (tX.colindices[s1] < tX.colindices[s2]) ++s1;
-    else if (tX.colindices[s1] > tX.colindices[s2]) ++s2;
-    else {
-      int ndx = tX.colindices[s1]; // = tD.colindices[2]
-      H[ndx] += tX.entries[s1]*tX.entries[s2]*alpha;
-      ++s1;
-      ++s2;
-    }
-  }
-}
-
-// [[Rcpp::export]]
-NumericVector diagXCinvXt(Rcpp::S4 obj, Rcpp::S4 transposeX)
-{
-  SparseMatrix tX(transposeX);
-  const int nPred = tX.dim[1];
-
-  IntegerVector supernodes = GetIntVector(obj, "supernodes", 0);
-  // Exchange row and columns compared to spam object, as in Ng and Peyton 1993
-  IntegerVector colpointers = GetIntVector(obj, "rowpointers", 0);
-  IntegerVector rowpointers = GetIntVector(obj, "colpointers", 0);
-  IntegerVector rowindices = GetIntVector(obj, "colindices", 0);
-
-  NumericVector L = Rcpp::clone<Rcpp::NumericVector>(obj.slot("entries"));
-
-  const int sz = L.size();
-  NumericVector F(sz, 0.0);
-  initAD(F, L, colpointers);
-  ADcholesky(F, L, supernodes, rowpointers, colpointers, rowindices);
-
-  NumericVector H(nPred, 0.0);
-
-  const int Nsupernodes = supernodes.size()-1;
-  for (int J=0; J<Nsupernodes;J++)
-  {
-    int s = rowpointers[J];
-    for (int j=supernodes[J]; j<supernodes[J+1]; j++)
-    {
-      int k = s;
-      for (int ndx = colpointers[j]; ndx < colpointers[j+1]; ndx++)
-      {
-        int i = rowindices[k++];
-        double alpha = F[ndx];
-        updateH(H, tX, i, j, alpha);
-      }
-      s++;
-    }
-  }
-  return H;
-}
-
-/*
-
- // [[Rcpp::export]]
- NumericVector partialDerivCholesky(Rcpp::S4 obj)
- {
- IntegerVector supernodes = GetIntVector(obj, "supernodes", 0);
-
- // Exchange row and columns compared to spam object, as in Ng and Peyton 1993
- IntegerVector colpointers = GetIntVector(obj, "rowpointers", 0);
- IntegerVector rowpointers = GetIntVector(obj, "colpointers", 0);
- IntegerVector rowindices = GetIntVector(obj, "colindices", 0);
-
- NumericVector L = Rcpp::clone<Rcpp::NumericVector>(obj.slot("entries"));
-
- const int sz = L.size();
- NumericVector F(sz, 0.0);
- initAD(F, L, colpointers);
- ADcholesky(F, L, supernodes, rowpointers, colpointers, rowindices);
- return F;
- }
-
-// [[Rcpp::export]]
-NumericVector ForwardCholesky(SEXP cholC, NumericVector& b)
-{
-  Rcpp::S4 obj(cholC);
-  // We use transpose for calculating Automated Differentiation.
-  IntegerVector supernodes = Rcpp::clone<Rcpp::IntegerVector>(obj.slot("supernodes"));
-  IntegerVector colpointers = Rcpp::clone<Rcpp::IntegerVector>(obj.slot("rowpointers"));
-  IntegerVector rowpointers = Rcpp::clone<Rcpp::IntegerVector>(obj.slot("colpointers"));
-  IntegerVector rowindices = Rcpp::clone<Rcpp::IntegerVector>(obj.slot("colindices"));
-  IntegerVector pivot = Rcpp::clone<Rcpp::IntegerVector>(obj.slot("pivot"));
-  IntegerVector invpivot = Rcpp::clone<Rcpp::IntegerVector>(obj.slot("invpivot"));
-
-  NumericVector L = Rcpp::clone<Rcpp::NumericVector>(obj.slot("entries"));
-
-  // C using indices starting at 0:
-  transf2C(supernodes);
-  transf2C(colpointers);
-  transf2C(rowpointers);
-  transf2C(rowindices);
-  transf2C(pivot);
-  transf2C(invpivot);
-
-  return forwardCholesky(L, b, supernodes, rowpointers,
-                      colpointers, rowindices, pivot, invpivot);
-
-}
-
-
-// [[Rcpp::export]]
-NumericVector BackwardCholesky(SEXP cholC, NumericVector& b)
-{
-  Rcpp::S4 obj(cholC);
-  // We use transpose for calculating Automated Differentiation.
-  IntegerVector supernodes = Rcpp::clone<Rcpp::IntegerVector>(obj.slot("supernodes"));
-  IntegerVector colpointers = Rcpp::clone<Rcpp::IntegerVector>(obj.slot("rowpointers"));
-  IntegerVector rowpointers = Rcpp::clone<Rcpp::IntegerVector>(obj.slot("colpointers"));
-  IntegerVector rowindices = Rcpp::clone<Rcpp::IntegerVector>(obj.slot("colindices"));
-  IntegerVector pivot = Rcpp::clone<Rcpp::IntegerVector>(obj.slot("pivot"));
-  IntegerVector invpivot = Rcpp::clone<Rcpp::IntegerVector>(obj.slot("invpivot"));
-
-  NumericVector L = Rcpp::clone<Rcpp::NumericVector>(obj.slot("entries"));
-
-  // C using indices starting at 0:
-  transf2C(supernodes);
-  transf2C(colpointers);
-  transf2C(rowpointers);
-  transf2C(rowindices);
-  transf2C(pivot);
-  transf2C(invpivot);
-
-  return backwardCholesky(L, b, supernodes, rowpointers,
-                         colpointers, rowindices, pivot, invpivot);
-}
-
-*/
-
 

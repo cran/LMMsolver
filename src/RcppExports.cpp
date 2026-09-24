@@ -10,28 +10,16 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
-// construct_ADchol_Rcpp
-List construct_ADchol_Rcpp(Rcpp::S4 obj_spam, const List& P_list);
-RcppExport SEXP _LMMsolver_construct_ADchol_Rcpp(SEXP obj_spamSEXP, SEXP P_listSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< Rcpp::S4 >::type obj_spam(obj_spamSEXP);
-    Rcpp::traits::input_parameter< const List& >::type P_list(P_listSEXP);
-    rcpp_result_gen = Rcpp::wrap(construct_ADchol_Rcpp(obj_spam, P_list));
-    return rcpp_result_gen;
-END_RCPP
-}
-// dlogdet
-NumericVector dlogdet(Rcpp::S4 obj, NumericVector theta, Nullable<NumericVector> b_);
-RcppExport SEXP _LMMsolver_dlogdet(SEXP objSEXP, SEXP thetaSEXP, SEXP b_SEXP) {
+// GetIntVector
+IntegerVector GetIntVector(Rcpp::S4 obj, const String& slotName, int ArrayIndexing);
+RcppExport SEXP _LMMsolver_GetIntVector(SEXP objSEXP, SEXP slotNameSEXP, SEXP ArrayIndexingSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::S4 >::type obj(objSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type theta(thetaSEXP);
-    Rcpp::traits::input_parameter< Nullable<NumericVector> >::type b_(b_SEXP);
-    rcpp_result_gen = Rcpp::wrap(dlogdet(obj, theta, b_));
+    Rcpp::traits::input_parameter< const String& >::type slotName(slotNameSEXP);
+    Rcpp::traits::input_parameter< int >::type ArrayIndexing(ArrayIndexingSEXP);
+    rcpp_result_gen = Rcpp::wrap(GetIntVector(obj, slotName, ArrayIndexing));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -47,16 +35,49 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// GetIntVector
-IntegerVector GetIntVector(Rcpp::S4 obj, const String& slotName, int ArrayIndexing);
-RcppExport SEXP _LMMsolver_GetIntVector(SEXP objSEXP, SEXP slotNameSEXP, SEXP ArrayIndexingSEXP) {
+// update_Rcpp_fun
+List update_Rcpp_fun(Rcpp::S4 obj);
+RcppExport SEXP _LMMsolver_update_Rcpp_fun(SEXP objSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::S4 >::type obj(objSEXP);
-    Rcpp::traits::input_parameter< const String& >::type slotName(slotNameSEXP);
-    Rcpp::traits::input_parameter< int >::type ArrayIndexing(ArrayIndexingSEXP);
-    rcpp_result_gen = Rcpp::wrap(GetIntVector(obj, slotName, ArrayIndexing));
+    rcpp_result_gen = Rcpp::wrap(update_Rcpp_fun(obj));
+    return rcpp_result_gen;
+END_RCPP
+}
+// solve_Rcpp_fun
+NumericVector solve_Rcpp_fun(Rcpp::S4 obj, const NumericVector& b);
+RcppExport SEXP _LMMsolver_solve_Rcpp_fun(SEXP objSEXP, SEXP bSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::S4 >::type obj(objSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type b(bSEXP);
+    rcpp_result_gen = Rcpp::wrap(solve_Rcpp_fun(obj, b));
+    return rcpp_result_gen;
+END_RCPP
+}
+// logdet_Rcpp_fun
+double logdet_Rcpp_fun(Rcpp::S4 obj);
+RcppExport SEXP _LMMsolver_logdet_Rcpp_fun(SEXP objSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::S4 >::type obj(objSEXP);
+    rcpp_result_gen = Rcpp::wrap(logdet_Rcpp_fun(obj));
+    return rcpp_result_gen;
+END_RCPP
+}
+// vec
+NumericVector vec(Rcpp::S4 ADobj, Rcpp::S4 spam_matrix);
+RcppExport SEXP _LMMsolver_vec(SEXP ADobjSEXP, SEXP spam_matrixSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::S4 >::type ADobj(ADobjSEXP);
+    Rcpp::traits::input_parameter< Rcpp::S4 >::type spam_matrix(spam_matrixSEXP);
+    rcpp_result_gen = Rcpp::wrap(vec(ADobj, spam_matrix));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -86,10 +107,12 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_LMMsolver_construct_ADchol_Rcpp", (DL_FUNC) &_LMMsolver_construct_ADchol_Rcpp, 2},
-    {"_LMMsolver_dlogdet", (DL_FUNC) &_LMMsolver_dlogdet, 3},
-    {"_LMMsolver_diagXCinvXt", (DL_FUNC) &_LMMsolver_diagXCinvXt, 2},
     {"_LMMsolver_GetIntVector", (DL_FUNC) &_LMMsolver_GetIntVector, 3},
+    {"_LMMsolver_diagXCinvXt", (DL_FUNC) &_LMMsolver_diagXCinvXt, 2},
+    {"_LMMsolver_update_Rcpp_fun", (DL_FUNC) &_LMMsolver_update_Rcpp_fun, 1},
+    {"_LMMsolver_solve_Rcpp_fun", (DL_FUNC) &_LMMsolver_solve_Rcpp_fun, 2},
+    {"_LMMsolver_logdet_Rcpp_fun", (DL_FUNC) &_LMMsolver_logdet_Rcpp_fun, 1},
+    {"_LMMsolver_vec", (DL_FUNC) &_LMMsolver_vec, 2},
     {"_LMMsolver_RowKron", (DL_FUNC) &_LMMsolver_RowKron, 2},
     {"_LMMsolver_MatrixProduct", (DL_FUNC) &_LMMsolver_MatrixProduct, 2},
     {NULL, NULL, 0}

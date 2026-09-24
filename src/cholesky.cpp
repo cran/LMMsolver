@@ -9,6 +9,8 @@
 // "spam: A sparse matrix R package with emphasis on MCMC
 // methods for Gaussian Markov random fields."
 // Journal of Statistical Software 36 (2010): 1-25.
+//
+// Implementation by Martin Boer, 2026.
 
 #include <Rcpp.h>
 #include <set>
@@ -16,9 +18,12 @@
 #include "AuxFun.h"
 #include "SparseMatrix.h"
 #include "cholesky.h"
+//#include <chrono>
 
+//using namespace std::chrono;
 using namespace Rcpp;
 using namespace std;
+
 
 // make indmap for supernode J:
 void makeIndMap(IntegerVector& indmap,
@@ -35,136 +40,407 @@ void makeIndMap(IntegerVector& indmap,
   }
 }
 
-// j is current column in Supernode J
-void cmod1(NumericVector& L, int j, int J,
-           const IntegerVector& supernodes,
-           const IntegerVector& colpointers)
+// Updates one target column j using 4 consecutive source
+// columns k0,...,k0+3.
+//
+// For each row i:
+//
+//   y = L[i,j]
+//   y -= L[i,k0  ] * L[j,k0  ]
+//   y -= L[i,k0+1] * L[j,k0+1]
+//   y -= L[i,k0+2] * L[j,k0+2]
+//   y -= L[i,k0+3] * L[j,k0+3]
+//   L[i,j] = y
+//
+// The target value is therefore loaded/stored only once.
+// ============================================================
+
+inline void update_column_cmod1_unroll4(
+    double* l,
+    int s,
+    int e,
+    int j,
+    int k0,
+    const IntegerVector& colpointers)
 {
-  const int& s = colpointers[j];
-  const int& e = colpointers[j+1];
-  // for all columns in supernode J left to j:
-  for (int k=supernodes[J];k<j;k++)
+  // Starting positions of the active parts of the
+  // four source columns.
+  const double* p0 = l + colpointers[k0]     + (j - k0);
+  const double* p1 = l + colpointers[k0 + 1] + (j - (k0 + 1));
+  const double* p2 = l + colpointers[k0 + 2] + (j - (k0 + 2));
+  const double* p3 = l + colpointers[k0 + 3] + (j - (k0 + 3));
+
+  // The first element of each active source column is
+  // L[j,k].
+  const double a0 = *p0;
+  const double a1 = *p1;
+  const double a2 = *p2;
+  const double a3 = *p3;
+
+  // Update target column.
+  for (int i = s; i < e; ++i)
   {
-    const int& jk = colpointers[k] + (j-k);
-    int ik = jk;
-    const double& Ljk = L[jk];
-    for (int ij=s; ij<e; ij++)
-    {
-       L[ij] -= L[ik++]*Ljk;
-       //ik++;
-    }
+    double y = l[i];
+
+    y -= (*p0++) * a0;
+    y -= (*p1++) * a1;
+    y -= (*p2++) * a2;
+    y -= (*p3++) * a3;
+
+    l[i] = y;
   }
 }
 
-// Adjust column j for all columns in supernode K:
-void cmod2(NumericVector& L, int j, int K, int sz,
-           NumericVector& t,
-           const IntegerVector& indmap,
-           const IntegerVector& supernodes,
-           const IntegerVector& rowpointers,
-           const IntegerVector& colpointers,
-           const IntegerVector& rowindices)
+// ============================================================
+// cmod1 using source-column unrolling
+// ============================================================
+
+void cmod1(
+    NumericVector& L,
+    int j,
+    int J,
+    const IntegerVector& supernodes,
+    const IntegerVector& colpointers)
 {
-  // init t:
-  for (int i=0;i<sz;i++)
+  double* l = L.begin();
+
+  const int s = colpointers[j];
+  const int e = colpointers[j + 1];
+
+  const int kstart = supernodes[J];
+  const int nsrc = j - kstart;
+
+  // Number of complete groups of 8.
+  const int n4 =  (nsrc / 4) * 4;
+
+  int k = kstart;
+
+  // ----------------------------------------------------------
+  // Groups of 4 source columns.
+  // ----------------------------------------------------------
+
+  const int kend = kstart + n4;
+
+  for (; k < kend; k += 4)
   {
-    t[i] = 0.0;
+    update_column_cmod1_unroll4(l, s, e, j, k, colpointers);
   }
 
-  const int& sCol = supernodes[K];
-  const int& eCol = supernodes[K+1];
-
-  for (int k=sCol; k<eCol; k++)
+  // Remaining source columns, as in original cmod1
+  for (; k < j; ++k)
   {
-    int jk = colpointers[k+1]-sz;
+    const int jk = colpointers[k] + (j - k);
+
     int ik = jk;
-    const double& Ljk = L[jk];
-    for (int i=sz-1;i>=0;i--)
-    {
-      t[i] += L[ik++]*Ljk;
-      //ik++;
-    }
-  }
+    const double Ljk = l[jk];
 
-  int r = rowpointers[K+1]-1;
-  int ref_pos = colpointers[j+1] - 1;
-  for (int i=0;i<sz;i++)
-  {
-    int ndx = rowindices[r--];
-    int pos = ref_pos - indmap[ndx];
-    L[pos] -= t[i];
+    for (int i = s; i < e; ++i)
+      l[i] -= l[ik++] * Ljk;
   }
 }
 
 void cdiv(NumericVector& L, int j, const IntegerVector& colpointers)
 {
-  const int& s = colpointers[j];
-  const int& e = colpointers[j+1];
+  double *l = L.begin();
+  const int s = colpointers[j];
+  const int e = colpointers[j+1];
 
   // pivot:
-  L[s] = sqrt(L[s]);
+  l[s] = sqrt(l[s]);
   // update column j:
-  double Ls = L[s];
+  double Ls = l[s];
   for (int i = s + 1; i < e; i++)
   {
-    L[i] /= Ls;
+    l[i] /= Ls;
   }
 }
 
 
-void cholesky(NumericVector& L,
-           const IntegerVector& supernodes,
-           const IntegerVector& rowpointers,
-           const IntegerVector& colpointers,
-           const IntegerVector& rowindices)
+inline void update_column_cmod2_unroll4(
+    double* l,
+    double* t,
+    int sz,
+    int k0,
+    const IntegerVector& colpointers)
+{
+  const double* p0 = l + colpointers[k0 + 1] - sz;
+  const double* p1 = l + colpointers[k0 + 2] - sz;
+  const double* p2 = l + colpointers[k0 + 3] - sz;
+  const double* p3 = l + colpointers[k0 + 4] - sz;
+
+  const double a0 = *p0;
+  const double a1 = *p1;
+  const double a2 = *p2;
+  const double a3 = *p3;
+
+  double* tptr = t + sz - 1;
+
+  for (int i = 0; i < sz; ++i)
+  {
+    *tptr-- += (*p0++) * a0
+             + (*p1++) * a1
+             + (*p2++) * a2
+             + (*p3++) * a3;
+  }
+}
+
+// cmod2 using 4 source-column unrolling
+void cmod2(
+    NumericVector& L,
+    int J,
+    int K,
+    int khead,
+    int klen,
+    int ncolup,
+    NumericVector& t,
+    const IntegerVector& indmap,
+    const IntegerVector& supernodes,
+    const IntegerVector& rowpointers,
+    const IntegerVector& colpointers,
+    const IntegerVector& rowindices)
+{
+  double* l = L.begin();
+  double* tp = t.begin();
+
+  const int eK = rowpointers[K + 1];
+  const int sCol = supernodes[K];
+  const int eCol = supernodes[K + 1];
+  const int srcWidth = eCol - sCol;
+
+  // Four source columns at a time.
+  const int n4 = (srcWidth / 4) * 4;
+
+  // One target column at a time.
+  for (int p = 0; p < ncolup; ++p)
+  {
+    const int j = rowindices[khead + p];
+    const int sz = klen - p;
+
+    // Special case: one source column.
+    if (srcWidth == 1)
+    {
+      const int src_end = colpointers[sCol + 1];
+      const int jk = src_end - sz;
+      const double Ljk = l[jk];
+
+      const double* lptr = l + src_end - 1;
+
+      int r = eK - 1;
+      const int ref_pos = colpointers[j + 1] - 1;
+
+      for (int i = 0; i < sz; ++i)
+      {
+        const int ndx = rowindices[r--];
+        const int pos = ref_pos - indmap[ndx];
+
+        l[pos] -= *lptr-- * Ljk;
+      }
+
+      continue;
+    }
+
+    // Initialise t.
+    for (int i = 0; i < sz; ++i)
+      tp[i] = 0.0;
+
+    int k = sCol;
+
+    for (; k < sCol + n4; k += 4)
+    {
+      update_column_cmod2_unroll4(l, tp, sz, k, colpointers);
+    }
+
+    // Remaining source columns.
+    for (; k < eCol; ++k)
+    {
+      const int jk = colpointers[k + 1] - sz;
+      const double Ljk = l[jk];
+      const double* lptr = l + jk;
+      double* tptr = tp + sz - 1;
+
+      for (int i = 0; i < sz; ++i)
+      {
+        *tptr-- += *lptr++ * Ljk;
+      }
+    }
+
+    // Scatter.
+    int r = eK - 1;
+
+    const int ref_pos = colpointers[j + 1] - 1;
+
+    for (int i = 0; i < sz; ++i)
+    {
+      const int ndx = rowindices[r--];
+      const int pos = ref_pos - indmap[ndx];
+
+      l[pos] -= tp[i];
+    }
+  }
+}
+
+
+void cholesky(
+    NumericVector& L,
+    const IntegerVector& supernodes,
+    const IntegerVector& rowpointers,
+    const IntegerVector& colpointers,
+    const IntegerVector& rowindices)
 {
   const int N = colpointers.size() - 1;
-  const int Nsupernodes = supernodes.size()-1;
 
-  // linked lists, see section 4.2 Ng and Peyton
-  IntegerVector HEAD(N,-1);
-  IntegerVector LINK(Nsupernodes,-1);
+  const int Nsupernodes = supernodes.size() - 1;
 
-  IntegerVector colhead = clone(rowpointers);
-  for (int J=0; J<Nsupernodes;J++)
+  // ------------------------------------------------------------
+  // SNODE[j] = supernode containing scalar row/column j
+  // ------------------------------------------------------------
+
+  IntegerVector SNODE(N);
+
+  for (int J = 0; J < Nsupernodes; ++J)
   {
-    int szNode = supernodes[J+1] - supernodes[J];
-    colhead[J] += szNode-1;
-    if (colhead[J] < rowpointers[J+1]-1)
+    for (int j = supernodes[J]; j < supernodes[J + 1];++j)
     {
-      int rNdx = rowindices[colhead[J]+1];
-      insert(HEAD, LINK, rNdx, J);
+      SNODE[j] = J;
     }
   }
 
-  IntegerVector indmap(N,0);
-  NumericVector t(N);
-  for (int J=0; J<Nsupernodes;J++) {
-    makeIndMap(indmap, J, rowpointers, rowindices);
-    for (int j=supernodes[J];j<supernodes[J+1];j++)
-    {
-      int K = HEAD[j];
-      while (K!=-1)
-      {
-        int nextK = LINK[K];
-        int sz = rowpointers[K+1] - colhead[K];
-        cmod2(L, j, K, sz, t, indmap, supernodes, rowpointers, colpointers, rowindices);
+  // ------------------------------------------------------------
+  // Supernodal linked lists
+  //
+  // LINK[J]   = head of list of source supernodes waiting
+  //             to update J
+  //
+  // LENGTH[K] = active suffix length of source supernode K
+  // ------------------------------------------------------------
 
-        colhead[K]++;
-        if (colhead[K] < rowpointers[K+1])
-        {
-          int rNdx = rowindices[colhead[K]];
-          insert(HEAD, LINK, rNdx, K);
-        }
-        K = nextK;
+  IntegerVector LINK(Nsupernodes, -1);
+  IntegerVector LENGTH(Nsupernodes, 0);
+
+  // ------------------------------------------------------------
+  // Workspace
+  // ------------------------------------------------------------
+
+  IntegerVector indmap(N, 0);
+
+  // Temporary vector used by cmod2.
+  NumericVector t(N);
+
+  // ------------------------------------------------------------
+  // Process supernodes in order
+  // ------------------------------------------------------------
+
+  for (int J = 0; J < Nsupernodes; ++J)
+  {
+    const int j0 = supernodes[J];
+    const int j1 = supernodes[J + 1];
+
+    makeIndMap(indmap, J, rowpointers, rowindices);
+
+    // Process all source supernodes currently waiting for J.
+    int K = LINK[J];
+
+    LINK[J] = -1;
+
+    while (K != -1)
+    {
+      const int nextK = LINK[K];
+      const int klen = LENGTH[K];
+
+      // First active row of K.
+      const int khead = rowpointers[K + 1] - klen;
+
+      // --------------------------------------------------------
+      // Determine how many active rows of K belong to J.
+      // --------------------------------------------------------
+
+      int ncolup = 0;
+
+      while (ncolup < klen &&
+             rowindices[khead + ncolup] < j1)
+      {
+        ++ncolup;
       }
-      HEAD[j] = -1;
+
+      // --------------------------------------------------------
+      // Numerical update.
+      //
+      // One target column at a time, with source columns of K
+      // processed four at a time.
+      // --------------------------------------------------------
+
+      if (ncolup > 0)
+      {
+        cmod2(L, J, K, khead, klen, ncolup, t, indmap,
+          supernodes, rowpointers, colpointers, rowindices);
+      }
+
+      // --------------------------------------------------------
+      // K may still have an active suffix.
+      //
+      // If so, put K on the list of the next supernode it
+      // contributes to.
+      // --------------------------------------------------------
+
+      if (klen > ncolup)
+      {
+        const int next_row = rowindices[khead + ncolup];
+        const int nextJ = SNODE[next_row];
+
+        LENGTH[K] = klen - ncolup;
+
+        LINK[K] = LINK[nextJ];
+        LINK[nextJ] = K;
+      }
+      else
+      {
+        LENGTH[K] = 0;
+        LINK[K] = -1;
+      }
+
+      K = nextK;
+    }
+
+    // ----------------------------------------------------------
+    // Factor supernode J
+    // ----------------------------------------------------------
+
+    for (int j = j0; j < j1; ++j)
+    {
       cmod1(L, j, J, supernodes, colpointers);
       cdiv(L, j, colpointers);
     }
-    colhead[J]++;
+
+    // ----------------------------------------------------------
+    // Schedule J's own update.
+    //
+    // The first 'width' entries of J's row list correspond to
+    // its diagonal supernode block. Everything after that is
+    // the update that J still has to deliver.
+    // ----------------------------------------------------------
+
+    const int width = j1 - j0;
+
+    const int len = rowpointers[J + 1] - rowpointers[J];
+
+    LENGTH[J] = len - width;
+
+    if (LENGTH[J] > 0)
+    {
+      const int next_row = rowindices[rowpointers[J] + width];
+      const int nextJ = SNODE[next_row];
+
+      LINK[J] = LINK[nextJ];
+      LINK[nextJ] = J;
+    }
+    else
+    {
+      LENGTH[J] = 0;
+      LINK[J] = -1;
+    }
   }
 }
+
 
 double logdet(const NumericVector& L, const IntegerVector& colpointers)
 {
@@ -270,82 +546,3 @@ NumericVector backwardCholesky(
   return xP;
 }
 
-
-/*
- *
-// [[Rcpp::export]]
-double logdet(Rcpp::S4 obj, NumericVector lambda)
-{
-  //Rcpp::S4 obj(arg);
-  IntegerVector supernodes = obj.slot("supernodes");
-  IntegerVector rowpointers = obj.slot("rowpointers");
-  IntegerVector colpointers = obj.slot("colpointers");
-  IntegerVector rowindices = obj.slot("rowindices");
-  NumericVector L = obj.slot("entries");
-  NumericMatrix P = obj.slot("P");
-  //NumericMatrix P = Rcpp::clone<Rcpp::NumericMatrix>(obj.slot("P"));
-
-  // define matrix L (lower triangle matrix values)
-  const int sz = P.nrow();
-  const int n_prec_mat = P.ncol();
-  //NumericVector L(sz, 0.0);
-  for (int i=0;i<sz;i++)
-  {
-    L[i] = 0.0;
-  }
-  for (int k=0;k<n_prec_mat;k++)
-  {
-    NumericMatrix::Column Pk = P(_, k);
-    double alpha = lambda[k];
-    for (int i=0;i<sz;i++)
-    {
-      L[i] += alpha*Pk[i];
-    }
-  }
-  cholesky(L, supernodes, rowpointers, colpointers, rowindices);
-  return logdet(L, colpointers);
-}
-
-*/
-
-/*
-// Just to show the structure of the sparse cholesky matrix with supernodes.
-// [[Rcpp::export]]
-NumericMatrix PrintCholesky(Rcpp::S4 obj)
-{
-  Rcout << "Class: " << as<std::string>(obj.attr("class")) << std::endl;
-
-  IntegerVector supernodes = GetIntVector(obj, "supernodes", 0);
-  // Exchange row and columns compared to spam object, as in Ng and Peyton 1993
-  IntegerVector colpointers = GetIntVector(obj, "rowpointers", 0);
-  IntegerVector rowpointers = GetIntVector(obj, "colpointers", 0);
-  IntegerVector rowindices = GetIntVector(obj, "colindices", 0);
-  IntegerVector pivot = GetIntVector(obj, "pivot", 0);
-  IntegerVector invpivot = GetIntVector(obj, "invpivot", 0);
-
-  NumericVector L = Rcpp::clone<Rcpp::NumericVector>(obj.slot("entries"));
-
-  const int Nsupernodes = supernodes.size()-1;
-  const int N = colpointers.size() - 1;
-  NumericMatrix A(N, N);
-  for (int J=0; J<Nsupernodes;J++)
-  {
-    int s = rowpointers[J];
-    Rcout << "Supernode: " << J << endl;
-    for (int j=supernodes[J]; j<supernodes[J+1]; j++)
-    {
-      Rcout << "  Column: " << j << endl;
-      int k = s;
-      for (int ndx = colpointers[j]; ndx < colpointers[j+1]; ndx++)
-      {
-        int i = rowindices[k++];
-        Rcout << "    row: " << i << " (ndx or key " << ndx << ")" << endl;
-        A(i, j) = L[ndx];
-      }
-      s++;
-    }
-  }
-  return A;
-}
-
-*/
