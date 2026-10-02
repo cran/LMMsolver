@@ -1,6 +1,6 @@
-bccc0a6d6b88f1201376a6547162e054 *DESCRIPTION
+950f30305ecfb6940322666269c2dae2 *DESCRIPTION
 cf1c460b794330086ce3a2efdc212dfb *NAMESPACE
-c15c4d0e6c700281a5a540c158a79d9a *NEWS.md
+339d17e8f53c072d04b2b764896ad8e4 *NEWS.md
 1a9a8d8c6da38da8aba6c24b2527b695 *R/ConditionalFactor.R
 7eb200d29829c9c741206a8e8905ba0e *R/DifferentiationCholesky.R
 05ab7a7815334254249217df563ebdaa *R/HarvilleODE.R
@@ -48,7 +48,7 @@ cb5c795567b497ce61a6e668c75fbc99 *data/oats.data.rda
 12117214de21024d6931a6ca4edd2d84 *inst/CITATION
 5504d6c9c705d0c613619a22bd38835a *inst/doc/Solving_Linear_Mixed_Models.R
 f8c1b83a5454d5e15362f1c0ee611fea *inst/doc/Solving_Linear_Mixed_Models.Rmd
-4a19754e767a1d1b2c559f647d9c0347 *inst/doc/Solving_Linear_Mixed_Models.html
+91b164cc3cdc4eca340ab2e309cf05d3 *inst/doc/Solving_Linear_Mixed_Models.html
 3e5088e2c568353291ef6b87d248eb71 *inst/tinytest/GLMMFull
 425e3c2c18c1ac7ca997c6d1d3ca95fa *inst/tinytest/LMMsolve0
 1e585cd548e3fee26e6012d8a3f44bfe *inst/tinytest/LMMsolve1
@@ -151,7 +151,7 @@ f0924f3dca9429bba86f5110354454c0 *man/predict.LMMsolve.Rd
 20dbe6548c31cb38725e11e9c9e4e44a *src/ADcholesky.h
 c869160706212bbf27ff90a82317e4c7 *src/AuxFun.cpp
 8eb7408449c1f2b271a444bad5a88012 *src/AuxFun.h
-641d3219aa800e447cb562407964d980 *src/LMMsolver_chol.cpp
+d9ea13833279685be2040853b65f539e *src/LMMsolver_chol.cpp
 9661e50f38957d51d405bae71fcce036 *src/Makevars.in
 c89d6b95d18721894ab45341d0fbc7a6 *src/Makevars.win
 794b7b898e62645e0f3c0c84a6166298 *src/RcppExports.cpp
